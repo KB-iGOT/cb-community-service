@@ -149,6 +149,9 @@
           }
         }
       }
+    },
+    "countOfAnswerPost": {
+      "type": "integer"
     }
   },
   "required": [

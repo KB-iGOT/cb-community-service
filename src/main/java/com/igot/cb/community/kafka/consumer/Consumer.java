@@ -128,6 +128,7 @@ public class Consumer {
         cbServerProperties.getElasticCommunityJsonPath());
     cacheService.putCache(Constants.REDIS_KEY_PREFIX, communityEntity.getData());
     cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
+    cacheService.upsertUserToHash(Constants.CMMUNITY_USER_REDIS_PREFIX+communityEntity.getCommunityId(),Constants.USER_PREFIX+userId, Constants.USER_PREFIX+userId);
 
   }
 

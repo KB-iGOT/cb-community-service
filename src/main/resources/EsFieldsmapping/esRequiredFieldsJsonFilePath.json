@@ -75,7 +75,7 @@
   "countOfPostCreated": {
     "type": "long"
   },
-  "competencies": {
+  "competencies_v6": {
     "type": "keyword"
   },
   "competencyArea": {

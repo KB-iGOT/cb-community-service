@@ -110,6 +110,7 @@ public class Consumer {
     String redisKey = Constants.CMMUNITY_USER_REDIS_PREFIX + communityEntity.getCommunityId();
 
     // Delete the key from Redis
+    objectRedisTemplate.delete(redisKey);
     ObjectNode dataNode = (ObjectNode) communityEntity.getData();
 
 // Perform the update
@@ -125,7 +126,7 @@ public class Consumer {
     esUtilService.updateDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE,
         communityEntity.getCommunityId(), map,
         cbServerProperties.getElasticCommunityJsonPath());
-    cacheService.putCache(communityEntity.getCommunityId(), communityEntity.getData());
+    cacheService.putCache(Constants.REDIS_KEY_PREFIX, communityEntity.getData());
     cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
     cacheService.upsertUserToHash(Constants.CMMUNITY_USER_REDIS_PREFIX+communityEntity.getCommunityId(),Constants.USER_PREFIX+userId, Constants.USER_PREFIX+userId);
 

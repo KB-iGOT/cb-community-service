@@ -15,11 +15,14 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
+import org.elasticsearch.action.get.GetRequest;
+import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.ClearScrollRequest;
@@ -27,12 +30,16 @@ import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.SearchScrollRequest;
 import org.elasticsearch.action.support.WriteRequest;
+import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.query.*;
 import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.script.Script;
+import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.aggregations.Aggregation;
@@ -50,6 +57,8 @@ import org.elasticsearch.search.sort.SortBuilders;
 import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.xcontent.XContentType;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -66,7 +75,9 @@ public class EsUtilServiceImpl implements EsUtilService {
     private RestHighLevelClient elasticsearchClient;*/
     private final EsConfig esConfig;
     private final RestHighLevelClient elasticsearchClient;
+    private  final RestHighLevelClient cluster2Client;
     private final Logger logger = LogManager.getLogger(getClass());
+
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -75,10 +86,15 @@ public class EsUtilServiceImpl implements EsUtilService {
     private CbServerProperties cbServerProperties;
 
     @Autowired
-    public EsUtilServiceImpl(RestHighLevelClient elasticsearchClient, EsConfig esConnection) {
+    public EsUtilServiceImpl(@Qualifier("elasticsearchClient") RestHighLevelClient elasticsearchClient, EsConfig esConnection,
+        @Qualifier("cluster2Client") RestHighLevelClient cluster2Client) {
         this.elasticsearchClient = elasticsearchClient;
         this.esConfig = esConnection;
+      this.cluster2Client = cluster2Client;
     }
+
+    @Value("${sunbird_user_index}")
+    private String sbUserIndex;
 
 
     @Override
@@ -739,6 +755,78 @@ public class EsUtilServiceImpl implements EsUtilService {
         return searchResult;
     }
 
+    @Override
+    public Boolean updateUserIndex(String userId, String communityId, Boolean append) {
+        logger.info("EsUtilService::updateUserIndex:inside method");
+        int retryCount = 5;
+        int attempt = 0;
+
+        while (attempt < retryCount) {
+            try {
+                // Prepare parameters for the script
+                // Prepare parameters for the script
+                Map<String, Object> params = new HashMap<>();
+                params.put("uuid", communityId);
+
+                // Choose the script source based on the operation type.
+                String scriptSource;
+                if (append) {
+                    scriptSource = "if (ctx._source.containsKey('discussionCommunities') == false || ctx._source.discussionCommunities == null) {" +
+                        "  ctx._source.discussionCommunities = [];" +
+                        "} " +
+                        "if (!ctx._source.discussionCommunities.contains(params.uuid)) {" +
+                        "  ctx._source.discussionCommunities.add(params.uuid);" +
+                        "}";
+                } else {
+                    scriptSource = "if (ctx._source.containsKey('discussionCommunities') && ctx._source.discussionCommunities != null) {" +
+                        "  ctx._source.discussionCommunities.removeIf(community -> community == params.uuid);" +
+                        "}";
+                }
+                Script script = new Script(ScriptType.INLINE, "painless", scriptSource, params);
+                Map<String, Object> upsertContent = new HashMap<>();
+                upsertContent.put(Constants.DISCUSSION_COMMUNITY_KEY, Collections.singletonList(communityId));
+
+                // Create the UpdateRequest without a type
+                UpdateRequest updateRequest = new UpdateRequest(sbUserIndex, userId)
+                    .script(script)
+                    .upsert(new IndexRequest(sbUserIndex).id(userId).source(upsertContent));
+
+                // Log the request for debugging
+                logger.info("UpdateRequest: {}", updateRequest);
+
+                UpdateResponse updateResponse = cluster2Client.update(updateRequest, RequestOptions.DEFAULT);
+
+                DocWriteResponse.Result result = updateResponse.getResult();
+
+                if (result == DocWriteResponse.Result.CREATED) {
+                    logger.info("WfRequests created successfully for userId: {}", userId);
+                } else if (result == DocWriteResponse.Result.UPDATED) {
+                    logger.info("WfRequests updated successfully for userId: {}", userId);
+                } else if (result == DocWriteResponse.Result.NOOP) {
+                    logger.info("WfRequests update was a noop; no changes were made for userId: {}", userId);
+                } else {
+                    logger.warn("WfRequests update:: Unexpected result: {}, for userId: {}", result, userId);
+                }
+
+                return true; // Success
+
+            } catch (ElasticsearchStatusException e) {
+                if (e.status() == RestStatus.CONFLICT) {
+                    attempt++;
+                    logger.warn("Conflict detected, retrying attempt {} of {}", attempt, retryCount);
+                } else {
+                    logger.error("Failed to upsert communityId for userId: {}", userId, e);
+                    return false;
+                }
+            } catch (Exception e) {
+                logger.error("Failed to upsert communityId for userId: {}", userId, e);
+                return false;
+            }
+        }
+
+        logger.error("Failed to upsert communityId for userId: {} after {} retries", userId, retryCount);
+        return false;
+    }
 
 
     /**

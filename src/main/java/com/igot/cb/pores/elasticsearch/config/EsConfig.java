@@ -27,16 +27,35 @@ public class EsConfig extends AbstractElasticsearchConfiguration {
     @Value("${elasticsearch.password}")
     private String elasticsearchPassword;
 
-    @Override
-    @Bean
-    public RestHighLevelClient elasticsearchClient() {
-        final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-        credentialsProvider.setCredentials(AuthScope.ANY,
-                new UsernamePasswordCredentials(elasticsearchUsername, elasticsearchPassword));
+    @Value("${elasticsearch.cluster2.host}")
+    private String elasticsearchCluster2Host;
 
-        RestClientBuilder builder = RestClient.builder(
-                        new HttpHost(elasticsearchHost, elasticsearchPort, "http"))
-                .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider));
+    @Value("${elasticsearch.cluster2.port}")
+    private int elasticsearchCluster2Port;
+
+    @Value("${elasticsearch.cluster2.username}")
+    private String elasticsearchCluster2Username;
+
+    @Value("${elasticsearch.cluster2.password}")
+    private String elasticsearchCluster2Password;
+
+    @Override
+    @Bean(name = "elasticsearchClient")
+    public RestHighLevelClient elasticsearchClient() {
+        return createClient(elasticsearchHost, elasticsearchPort, elasticsearchUsername, elasticsearchPassword);
+    }
+
+    @Bean(name = "cluster2Client")
+    public RestHighLevelClient cluster2Client() {
+        return createClient(elasticsearchCluster2Host, elasticsearchCluster2Port, elasticsearchCluster2Username, elasticsearchCluster2Password);
+    }
+
+    private RestHighLevelClient createClient(String host, int port, String username, String password) {
+        final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+        credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(username, password));
+
+        RestClientBuilder builder = RestClient.builder(new HttpHost(host, port, "http"))
+            .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider));
 
         return new RestHighLevelClient(builder);
     }

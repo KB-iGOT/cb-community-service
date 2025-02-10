@@ -377,6 +377,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 dataMap.put(Constants.COMMUNITY, optCommunity.get());
                 dataMap.put(Constants.USER_ID, userId);
                 producer.push(userCountUpdateTopic, dataMap);
+                esUtilService.updateUserIndex(userId,communityId,true);
                 return response;
             } else {
                 // Check if STATUS is false in the existing record
@@ -397,6 +398,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     dataMap.put(Constants.COMMUNITY, optCommunity.get());
                     dataMap.put(Constants.USER_ID, userId);
                     producer.push(userCountUpdateTopic, dataMap);
+                    esUtilService.updateUserIndex(userId,communityId,true);
                     return response;
 
                 } else {
@@ -728,6 +730,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 // Delete the key from Redis
                 objectRedisTemplate.delete(redisKey);
                 cacheService.deleteUserFromHash(Constants.CMMUNITY_USER_REDIS_PREFIX+communityId,Constants.USER_PREFIX+userId);
+                esUtilService.updateUserIndex(userId,communityId,false);
                 return response;
             } else {
                 response.setResponseCode(HttpStatus.BAD_REQUEST);

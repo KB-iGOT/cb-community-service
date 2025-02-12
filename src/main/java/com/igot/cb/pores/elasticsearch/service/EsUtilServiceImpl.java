@@ -758,10 +758,6 @@ public class EsUtilServiceImpl implements EsUtilService {
     @Override
     public Boolean updateUserIndex(String userId, String communityId, Boolean append) {
         logger.info("EsUtilService::updateUserIndex:inside method");
-        int retryCount = 5;
-        int attempt = 0;
-
-        while (attempt < retryCount) {
             try {
                 // Prepare parameters for the script
                 // Prepare parameters for the script
@@ -789,7 +785,7 @@ public class EsUtilServiceImpl implements EsUtilService {
 //                 Create the UpdateRequest without a type
                 UpdateRequest updateRequest = new UpdateRequest(sbUserIndex, Constants._DOC, userId)
                     .script(script)
-                    .upsert(new IndexRequest(sbUserIndex).id(userId).source(upsertContent));
+                    .upsert(new IndexRequest(sbUserIndex).id(userId).source(upsertContent)).retryOnConflict(5);
 //                UpdateRequest updateRequest = new UpdateRequest("user_alias", "3c6b064b-fa20-4b59-8502-b68dd3bdb0bd")
 //                    .doc(upsertContent);
 
@@ -815,8 +811,7 @@ public class EsUtilServiceImpl implements EsUtilService {
 
             } catch (ElasticsearchStatusException e) {
                 if (e.status() == RestStatus.CONFLICT) {
-                    attempt++;
-                    logger.warn("Conflict detected, retrying attempt {} of {}", attempt, retryCount);
+                    logger.warn("Conflict detected, retrying attempt {} of {}", e);
                 } else {
                     logger.error("Failed to upsert communityId for userId: {}", userId, e);
                     return false;
@@ -825,9 +820,9 @@ public class EsUtilServiceImpl implements EsUtilService {
                 logger.error("Failed to upsert communityId for userId: {}", userId, e);
                 return false;
             }
-        }
 
-        logger.error("Failed to upsert communityId for userId: {} after {} retries", userId, retryCount);
+
+        logger.error("Failed to upsert communityId for userId: {} after {} retries", userId);
         return false;
     }
 

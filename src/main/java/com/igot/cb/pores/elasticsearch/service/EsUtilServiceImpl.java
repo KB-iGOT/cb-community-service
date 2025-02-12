@@ -35,7 +35,7 @@ import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.*;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.script.Script;
@@ -49,13 +49,13 @@ import org.elasticsearch.search.aggregations.ParsedMultiBucketAggregation;
 import org.elasticsearch.search.aggregations.bucket.MultiBucketsAggregation;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
 import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.elasticsearch.search.aggregations.metrics.ParsedTopHits;
-import org.elasticsearch.search.aggregations.metrics.TopHits;
-import org.elasticsearch.search.aggregations.metrics.TopHitsAggregationBuilder;
+import org.elasticsearch.search.aggregations.metrics.tophits.ParsedTopHits;
+import org.elasticsearch.search.aggregations.metrics.tophits.TopHits;
+import org.elasticsearch.search.aggregations.metrics.tophits.TopHitsAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.elasticsearch.search.sort.SortOrder;
-import org.elasticsearch.xcontent.XContentType;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -201,7 +201,7 @@ public class EsUtilServiceImpl implements EsUtilService {
                     extractFacetData(paginatedSearchResponse, searchCriteria);
             searchResult.setData(objectMapper.valueToTree(paginatedResult));
             searchResult.setFacets(fieldAggregations);
-            searchResult.setTotalCount(paginatedSearchResponse.getHits().getTotalHits().value);
+            searchResult.setTotalCount(paginatedSearchResponse.getHits().getTotalHits());
             return searchResult;
         } catch (IOException e) {
             logger.error("Error while fetching details from elastic search");
@@ -467,7 +467,7 @@ public class EsUtilServiceImpl implements EsUtilService {
     public void deleteDocumentsByCriteria(String esIndexName, SearchSourceBuilder sourceBuilder) {
         try {
             SearchHits searchHits = executeSearch(esIndexName, sourceBuilder);
-            if (searchHits.getTotalHits().value > 0) {
+            if (searchHits.getTotalHits() > 0) {
                 BulkResponse bulkResponse = deleteMatchingDocuments(esIndexName, searchHits);
                 if (!bulkResponse.hasFailures()) {
                     logger.info("Documents matching the criteria deleted successfully from Elasticsearch.");
@@ -751,7 +751,7 @@ public class EsUtilServiceImpl implements EsUtilService {
         SearchResult searchResult= new SearchResult();
         searchResult.setData(objectMapper.valueToTree(paginatedResult));
         searchResult.setFacets(fieldAggregations);
-        searchResult.setTotalCount(response.getHits().getTotalHits().value);
+        searchResult.setTotalCount(response.getHits().getTotalHits());
         return searchResult;
     }
 
@@ -786,10 +786,13 @@ public class EsUtilServiceImpl implements EsUtilService {
                 Map<String, Object> upsertContent = new HashMap<>();
                 upsertContent.put(Constants.DISCUSSION_COMMUNITY_KEY, Collections.singletonList(communityId));
 
-                // Create the UpdateRequest without a type
-                UpdateRequest updateRequest = new UpdateRequest(sbUserIndex, userId)
+//                 Create the UpdateRequest without a type
+                UpdateRequest updateRequest = new UpdateRequest(sbUserIndex, Constants._DOC, userId)
                     .script(script)
                     .upsert(new IndexRequest(sbUserIndex).id(userId).source(upsertContent));
+//                UpdateRequest updateRequest = new UpdateRequest("user_alias", "3c6b064b-fa20-4b59-8502-b68dd3bdb0bd")
+//                    .doc(upsertContent);
+
 
                 // Log the request for debugging
                 logger.info("UpdateRequest: {}", updateRequest);

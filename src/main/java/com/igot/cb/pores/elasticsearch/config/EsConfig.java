@@ -11,10 +11,10 @@ import org.elasticsearch.client.RestHighLevelClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.elasticsearch.config.AbstractElasticsearchConfiguration;
+
 
 @Configuration
-public class EsConfig extends AbstractElasticsearchConfiguration {
+public class EsConfig  {
     @Value("${elasticsearch.host}")
     private String elasticsearchHost;
 
@@ -39,7 +39,7 @@ public class EsConfig extends AbstractElasticsearchConfiguration {
     @Value("${elasticsearch.cluster2.password}")
     private String elasticsearchCluster2Password;
 
-    @Override
+//    @Override
     @Bean(name = "elasticsearchClient")
     public RestHighLevelClient elasticsearchClient() {
         return createClient(elasticsearchHost, elasticsearchPort, elasticsearchUsername, elasticsearchPassword);

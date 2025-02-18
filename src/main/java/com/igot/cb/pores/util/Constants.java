@@ -177,6 +177,8 @@ public class Constants {
     public static final String REPORTED = "reported";
     public static final String COMMUNITY_REPORT_FAILED = "Failed to report discussion";
     public static final String REPORTED_BY = "reportedBy";
+    public static final String _DOC = "_doc";
+    public static final String DISCUSSION_COMMUNITY_KEY = "discussionCommunities";
 
     private Constants() {
     }

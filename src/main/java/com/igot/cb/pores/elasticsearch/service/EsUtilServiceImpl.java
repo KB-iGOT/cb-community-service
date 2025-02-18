@@ -143,11 +143,9 @@ public class EsUtilServiceImpl implements EsUtilService {
                     iterator.remove();
                 }
             }
-            IndexRequest indexRequest =
-                    new IndexRequest(index)
-                            .id(entityId)
-                            .source(updatedDocument)
-                            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+            IndexRequest indexRequest = new IndexRequest(index, indexType, entityId)
+                .source(updatedDocument)
+                .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
             IndexResponse response = elasticsearchClient.index(indexRequest, RequestOptions.DEFAULT);
             return response.status();
         } catch (IOException e) {

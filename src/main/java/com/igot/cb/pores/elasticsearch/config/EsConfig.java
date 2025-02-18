@@ -3,7 +3,6 @@ package com.igot.cb.pores.elasticsearch.config;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
@@ -27,17 +26,17 @@ public class EsConfig  {
     @Value("${elasticsearch.password}")
     private String elasticsearchPassword;
 
-    @Value("${elasticsearch.cluster2.host}")
-    private String elasticsearchCluster2Host;
+    @Value("${elasticsearch.sbESClient.host}")
+    private String sbESClientHost;
 
-    @Value("${elasticsearch.cluster2.port}")
-    private int elasticsearchCluster2Port;
+    @Value("${elasticsearch.sbESClient.port}")
+    private int sbESClientPort;
 
-    @Value("${elasticsearch.cluster2.username}")
-    private String elasticsearchCluster2Username;
+    @Value("${elasticsearch.sbESClient.username}")
+    private String sbESClientUsername;
 
-    @Value("${elasticsearch.cluster2.password}")
-    private String elasticsearchCluster2Password;
+    @Value("${elasticsearch.sbESClient.password}")
+    private String sbESClientPassword;
 
 //    @Override
     @Bean(name = "elasticsearchClient")
@@ -45,9 +44,9 @@ public class EsConfig  {
         return createClient(elasticsearchHost, elasticsearchPort, elasticsearchUsername, elasticsearchPassword);
     }
 
-    @Bean(name = "cluster2Client")
-    public RestHighLevelClient cluster2Client() {
-        return createClient(elasticsearchCluster2Host, elasticsearchCluster2Port, elasticsearchCluster2Username, elasticsearchCluster2Password);
+    @Bean(name = "sbESClient")
+    public RestHighLevelClient sbESClient() {
+        return createClient(sbESClientHost, sbESClientPort, sbESClientUsername, sbESClientPassword);
     }
 
     private RestHighLevelClient createClient(String host, int port, String username, String password) {

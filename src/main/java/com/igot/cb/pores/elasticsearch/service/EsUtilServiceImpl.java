@@ -11,7 +11,6 @@ import com.igot.cb.pores.exceptions.CustomException;
 import com.igot.cb.pores.util.CbServerProperties;
 import com.igot.cb.pores.util.Constants;
 import com.networknt.schema.JsonSchemaFactory;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -21,8 +20,6 @@ import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
-import org.elasticsearch.action.get.GetRequest;
-import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.ClearScrollRequest;
@@ -75,7 +72,7 @@ public class EsUtilServiceImpl implements EsUtilService {
     private RestHighLevelClient elasticsearchClient;*/
     private final EsConfig esConfig;
     private final RestHighLevelClient elasticsearchClient;
-    private  final RestHighLevelClient cluster2Client;
+    private  final RestHighLevelClient sbESClient;
     private final Logger logger = LogManager.getLogger(getClass());
 
 
@@ -87,10 +84,10 @@ public class EsUtilServiceImpl implements EsUtilService {
 
     @Autowired
     public EsUtilServiceImpl(@Qualifier("elasticsearchClient") RestHighLevelClient elasticsearchClient, EsConfig esConnection,
-        @Qualifier("cluster2Client") RestHighLevelClient cluster2Client) {
+        @Qualifier("sbESClient") RestHighLevelClient sbESClient) {
         this.elasticsearchClient = elasticsearchClient;
         this.esConfig = esConnection;
-      this.cluster2Client = cluster2Client;
+      this.sbESClient = sbESClient;
     }
 
     @Value("${sunbird_user_index}")
@@ -791,7 +788,7 @@ public class EsUtilServiceImpl implements EsUtilService {
                 // Log the request for debugging
                 logger.info("UpdateRequest: {}", updateRequest);
 
-                UpdateResponse updateResponse = cluster2Client.update(updateRequest, RequestOptions.DEFAULT);
+                UpdateResponse updateResponse = sbESClient.update(updateRequest, RequestOptions.DEFAULT);
 
                 DocWriteResponse.Result result = updateResponse.getResult();
 

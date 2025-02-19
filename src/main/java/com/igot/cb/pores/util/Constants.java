@@ -179,6 +179,11 @@ public class Constants {
     public static final String REPORTED_BY = "reportedBy";
     public static final String _DOC = "_doc";
     public static final String DISCUSSION_COMMUNITY_KEY = "discussionCommunities";
+    public static final String COMMUNITY_UPLOAD_FILE = "api.community.uploadFile";
+    public static final String COMMUNITY_FILE_EMPTY = "File is empty";
+    public static final String UPLOAD_FILE = "api.file.upload";
+    public static final String NAME = "name";
+    public static final String URL = "url";
 
     private Constants() {
     }

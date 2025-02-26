@@ -73,20 +73,19 @@ public class Consumer {
     }
   }
 
-  private void updatePostCount(Map<String, Object> updateUserCount) {
+  private void updatePostCount(Map<String, Object> updatePostAndAnswerPostCount) {
     log.info("Received post updation topic msg::inside updatePostCount");
-    String communityId = (String) updateUserCount.get(Constants.COMMUNITY_ID);
-    Optional<CommunityEntity> communityEntityOptional= communityEngagementRepository.findByCommunityIdAndIsActive(communityId, true);
-    if (communityEntityOptional.isPresent()){
+    String communityId = (String) updatePostAndAnswerPostCount.get(Constants.COMMUNITY_ID);
+    Optional<CommunityEntity> communityEntityOptional = communityEngagementRepository.findByCommunityIdAndIsActive(
+        communityId, true);
+    if (communityEntityOptional.isPresent()) {
       ObjectNode dataNode = (ObjectNode) communityEntityOptional.get().getData();
-      long currentCount = 0L;
-      if (dataNode.has(Constants.COUNT_OF_POST_CREATED)) {
-        currentCount = dataNode.get(Constants.COUNT_OF_POST_CREATED).asLong();
-      }
-      if (updateUserCount.get(Constants.STATUS).equals(Constants.INCREMENT)){
-        dataNode.put(Constants.COUNT_OF_POST_CREATED,currentCount+1);
-      } if (updateUserCount.get(Constants.STATUS).equals(Constants.DECREMENT)){
-        dataNode.put(Constants.COUNT_OF_POST_CREATED,currentCount-1);
+      if (Constants.POST.equalsIgnoreCase(
+          (String) updatePostAndAnswerPostCount.get(Constants.TYPE))) {
+        updateCount(dataNode, updatePostAndAnswerPostCount, Constants.COUNT_OF_POST_CREATED);
+      } else if (Constants.ANSWER_POST.equalsIgnoreCase(
+          (String) updatePostAndAnswerPostCount.get(Constants.TYPE))) {
+        updateCount(dataNode, updatePostAndAnswerPostCount, Constants.COUNT_OF_ANSWER_POST_CREATED);
       }
       communityEntityOptional.get().setData(dataNode);
       communityEngagementRepository.save(communityEntityOptional.get());
@@ -94,8 +93,21 @@ public class Consumer {
       esUtilService.updateDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE,
           communityEntityOptional.get().getCommunityId(), map,
           cbServerProperties.getElasticCommunityJsonPath());
-      cacheService.putCache(Constants.REDIS_KEY_PREFIX, communityEntityOptional.get().getData());
+      cacheService.putCache(communityId, communityEntityOptional.get().getData());
       cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
+    }
+  }
+
+  private void updateCount(ObjectNode dataNode, Map<String, Object> updatePostAndAnswerPostCount,
+      String countField) {
+    long currentCount = 0L;
+    if (dataNode.has(countField)) {
+      currentCount = dataNode.get(countField).asLong();
+    }
+    if (updatePostAndAnswerPostCount.get(Constants.STATUS).equals(Constants.INCREMENT)) {
+      dataNode.put(countField, currentCount + 1);
+    } else if (updatePostAndAnswerPostCount.get(Constants.STATUS).equals(Constants.DECREMENT)) {
+      dataNode.put(countField, currentCount - 1);
     }
   }
 
@@ -107,9 +119,6 @@ public class Consumer {
     propertyMap.put(Constants.CommunityId, communityEntity.getCommunityId());
     propertyMap.put(Constants.STATUS, true);
     cassandraOperation.insertRecord(Constants.KEYSPACE_SUNBIRD, Constants.USER_COMMUNITY_LOOK_UP_TABLE, propertyMap);
-    String redisKey = Constants.CMMUNITY_USER_REDIS_PREFIX + communityEntity.getCommunityId();
-
-    // Delete the key from Redis
     ObjectNode dataNode = (ObjectNode) communityEntity.getData();
 
 // Perform the update

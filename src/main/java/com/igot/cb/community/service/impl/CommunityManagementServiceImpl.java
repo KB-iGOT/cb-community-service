@@ -787,7 +787,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 updateCommunityDetails(optCommunity.get(), userId, dataNode);
                 String redisKey = Constants.CMMUNITY_USER_REDIS_PREFIX + communityId;
                 // Delete the key from Redis
-                objectRedisTemplate.delete(redisKey);
                 cacheService.deleteUserFromHash(Constants.CMMUNITY_USER_REDIS_PREFIX+communityId,Constants.USER_PREFIX+userId);
                 esUtilService.updateUserIndex(userId,communityId,false);
                 cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchPayload()));

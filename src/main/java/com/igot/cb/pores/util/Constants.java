@@ -187,9 +187,6 @@ public class Constants {
     public static final String ORG_REDIX_KEY = "org:";
     public static final String ORG_ID = "orgId";
     public static final String API_POPULAR_COMMUNITY = "api.popular communities";
-    public static final String TYPE = "type";
-    public static final String ANSWER_POST = "answerPost";
-    public static final String POST = "post";
 
     private Constants() {
     }

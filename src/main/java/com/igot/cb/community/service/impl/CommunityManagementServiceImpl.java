@@ -1342,7 +1342,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
             searchSourceBuilder.from(offset); // Set the offset
             searchSourceBuilder.size(limit); // Number of documents to retrieve
-
             searchSourceBuilder.query(QueryBuilders.boolQuery()
                 .filter(QueryBuilders.termQuery(Constants.STATUS, Constants.ACTIVE)));
 

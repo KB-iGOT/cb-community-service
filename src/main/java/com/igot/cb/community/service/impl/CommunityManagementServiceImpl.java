@@ -143,6 +143,13 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
         try {
             // Check if the community already exists
+            CommunityCategory category = categoryRepository.findByCategoryIdAndIsActive(communityDetails.get(Constants.TOPIC_ID).asInt(), true);
+            if (category == null) {
+                response.getParams().setStatus(Constants.FAILED);
+                response.getParams().setErrMsg(Constants.TOPIC_IS_INACTIVE);
+                response.setResponseCode(HttpStatus.BAD_REQUEST);
+                return response;
+            }
             if (esUtilService.doesCommunityExist(communityDetails.get(Constants.ORG_ID).asText(),
                 communityDetails.get(Constants.COMMUNITY_NAME).asText(), communityDetails.get(Constants.TOPIC_ID).asLong())) {
                 response.getParams().setStatus(Constants.FAILED);
@@ -180,6 +187,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 cacheService.putCache(communityId, communityDetailsMap);
                 log.info(
                         "created community");
+                updateCommunityCountInTopic(category, Constants.INCREMENT);
                 cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
                 cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchPayload()));
                 response.getResult().put(Constants.STATUS, Constants.SUCCESSFULLY_CREATED);
@@ -195,6 +203,25 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         } catch (Exception e) {
             log.error("error occured while creating commmunity:" + e);
             throw new CustomException("error while processing", e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private void updateCommunityCountInTopic(CommunityCategory category, String increment) {
+        if (category != null) {
+            Long currentCount = Optional.ofNullable(category.getCountOfCommunities()).orElse(0L);
+            if (Constants.INCREMENT.equals(increment)) {
+                category.setCountOfCommunities(currentCount + 1);
+            } else {
+                category.setCountOfCommunities(currentCount - 1);
+            }
+            Timestamp currentTimestamp = new Timestamp(System.currentTimeMillis());
+            category.setLastUpdatedAt(currentTimestamp);
+            categoryRepository.save(category);
+            Map<String, Object> communityDetailsMap = objectMapper.convertValue(category,
+                Map.class);
+            esUtilService.addDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
+                String.valueOf(category.getCategoryId()), communityDetailsMap,
+                cbServerProperties.getElasticCommunityCategoryJsonPath());
         }
     }
 
@@ -811,7 +838,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         try {
             SearchResult searchResult = new SearchResult();
             if (searchCriteria.isOverrideCache()) {
-                return handleSearchAndCache(searchCriteria, response);
+                return handleSearchAndCache(searchCriteria, response, Constants.INDEX_NAME);
             }
             searchResult = redisTemplate.opsForValue()
                 .get(generateRedisJwtTokenKey(searchCriteria));
@@ -828,7 +855,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     HttpStatus.BAD_REQUEST, Constants.FAILED_CONST);
                 return response;
             }
-            return handleSearchAndCache(searchCriteria, response);
+            return handleSearchAndCache(searchCriteria, response, Constants.INDEX_NAME);
         } catch (Exception e) {
             logger.error("Error occured while searching:", e);
             throw new CustomException(Constants.ERROR, "error while processing",
@@ -873,15 +900,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 }
                 CommunityCategory communityCategorySaved = persistCategoryInPrimary(categoryDetails,
                     categoryDetails.get(Constants.PARENT_ID).asInt(), userId, currentTimestamp);
-                ((ObjectNode) categoryDetails).put(Constants.CATEGORY_ID,
-                    communityCategorySaved.getCategoryId());
-                ((ObjectNode) categoryDetails).put(Constants.STATUS, Constants.ACTIVE);
-                ((ObjectNode) categoryDetails).put(Constants.CREATED_AT,
-                    String.valueOf(currentTimestamp));
-                ((ObjectNode) categoryDetails).put(Constants.UPDATED_AT,
-                    String.valueOf(currentTimestamp));
-                ((ObjectNode) categoryDetails).put(Constants.CREATED_BY, userId);
-                ((ObjectNode) categoryDetails).put(Constants.UPDATED_BY, userId);
+
                 Map<String, Object> communityDetailsMap = objectMapper.convertValue(categoryDetails,
                     Map.class);
                 esUtilService.updateDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
@@ -896,7 +915,8 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             } else {
                 Optional<CommunityCategory> communityCatgoryOptional = Optional.ofNullable(
                     categoryRepository.findByCategoryNameAndIsActive(
-                        categoryDetails.get(Constants.CATEGORY_NAME).asText(), true));
+                        categoryDetails.get(Constants.CATEGORY_NAME).asText(), true)
+                );
                 if (communityCatgoryOptional.isPresent()) {
                     response.getParams().setStatus(Constants.FAILED);
                     response.getParams().setErrMsg(Constants.ALREADY_CATEGORY_PRESENT);
@@ -905,15 +925,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 }
                 CommunityCategory savedCategory = persistCategoryInPrimary(categoryDetails, 0,
                     userId, currentTimestamp);
-                ((ObjectNode) categoryDetails).put(Constants.CATEGORY_ID,
-                    savedCategory.getCategoryId());
-                ((ObjectNode) categoryDetails).put(Constants.STATUS, Constants.ACTIVE);
-                ((ObjectNode) categoryDetails).put(Constants.CREATED_AT,
-                    String.valueOf(currentTimestamp));
-                ((ObjectNode) categoryDetails).put(Constants.UPDATED_AT,
-                    String.valueOf(currentTimestamp));
-                ((ObjectNode) categoryDetails).put(Constants.CREATED_BY, userId);
-                ((ObjectNode) categoryDetails).put(Constants.UPDATED_BY, userId);
                 Map<String, Object> communityDetailsMap = objectMapper.convertValue(categoryDetails,
                     Map.class);
                 esUtilService.addDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
@@ -1558,6 +1569,38 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         }
     }
 
+    @Override
+    public ApiResponse searchTopic(SearchCriteria searchCriteria) {
+        log.info("CommunityEngagementService:searchTopic::inside method");
+        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_SEARCH);
+        try {
+            SearchResult searchResult = new SearchResult();
+            if (searchCriteria.isOverrideCache()) {
+                return handleSearchAndCache(searchCriteria, response, Constants.CATEGORY_INDEX_NAME);
+            }
+            searchResult = redisTemplate.opsForValue()
+                .get(generateRedisJwtTokenKey(searchCriteria));
+            if (searchResult != null) {
+                log.info(
+                    "DiscussionServiceImpl::searchDiscussion:  search result fetched from redis");
+                response.getResult().put(Constants.SEARCH_RESULTS, searchResult);
+                createSuccessResponse(response);
+                return response;
+            }
+            String searchString = searchCriteria.getSearchString();
+            if (searchString != null && searchString.length() < 2) {
+                createErrorResponse(response, Constants.MINIMUM_CHARACTERS_NEEDED,
+                    HttpStatus.BAD_REQUEST, Constants.FAILED_CONST);
+                return response;
+            }
+            return handleSearchAndCache(searchCriteria, response, Constants.CATEGORY_INDEX_NAME);
+        } catch (Exception e) {
+            logger.error("Error occured while searching:", e);
+            throw new CustomException(Constants.ERROR, "error while processing",
+                HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     public ApiResponse uploadFile(File file, String cloudFolderName, String containerName) {
         ApiResponse response = ProjectUtil.createDefaultResponse(Constants.UPLOAD_FILE);
         try {
@@ -1617,6 +1660,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         communityCategory.setDescription(categoryDetails.get(Constants.DESCRIPTION).asText());
         communityCategory.setParentId(parentId);
         communityCategory.setCreatedAt(currentTimestamp);
+        communityCategory.setCountOfCommunities(0L);
         communityCategory.setDepartmentId(categoryDetails.get(Constants.DEPARTMENT_ID).asText());
         // Save to the repository and fetch the generated ID
         return categoryRepository.save(communityCategory);
@@ -1625,9 +1669,9 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
 
 
-    private ApiResponse handleSearchAndCache(SearchCriteria searchCriteria, ApiResponse response) {
+    private ApiResponse handleSearchAndCache(SearchCriteria searchCriteria, ApiResponse response, String indexName) {
         try {
-            SearchResult searchResult = esUtilService.searchDocuments(Constants.INDEX_NAME,
+            SearchResult searchResult = esUtilService.searchDocuments(indexName,
                 searchCriteria);
             List<Map<String, Object>> discussions = objectMapper.convertValue(
                 searchResult.getData(),

@@ -222,7 +222,23 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             esUtilService.addDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
                 String.valueOf(category.getCategoryId()), communityDetailsMap,
                 cbServerProperties.getElasticCommunityCategoryJsonPath());
+            cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
         }
+    }
+
+    private SearchCriteria createDefaultSearchCriteriaForTopic() {
+        SearchCriteria criteria = new SearchCriteria();
+        // Initialize filterCriteriaMap with default value
+        HashMap<String, Object> filterMap = new HashMap<>();
+        filterMap.put(Constants.STATUS, Constants.ACTIVE);
+        criteria.setFilterCriteriaMap(filterMap);
+        // Initialize requestedFields with default values
+        List<String> fields = Arrays.asList(Constants.CATEGORY_NAME, Constants.COUNT_OF_COMMUNITIES, Constants.DEPARTMENT_ID);
+        criteria.setRequestedFields(fields);
+        // Set default pagination values
+        criteria.setPageNumber(0);
+        criteria.setPageSize(20);
+        return criteria;
     }
 
     private SearchCriteria createDefaultSearchPayload() {
@@ -331,6 +347,13 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             Optional<CommunityEntity> communityEntityOptional = communityEngagementRepository.findByCommunityIdAndIsActive(communityId, true);
             if (communityEntityOptional.isPresent()) {
                 CommunityEntity communityEntity = communityEntityOptional.get();
+                CommunityCategory category = categoryRepository.findByCategoryIdAndIsActive(communityEntity.getData().get(Constants.TOPIC_ID).asInt(), true);
+                if (category == null) {
+                    response.getParams().setStatus(Constants.FAILED);
+                    response.getParams().setErrMsg(Constants.TOPIC_IS_INACTIVE);
+                    response.setResponseCode(HttpStatus.BAD_REQUEST);
+                    return response;
+                }
                 communityEntity.setActive(false);
                 communityEngagementRepository.save(communityEntity);
                 JsonNode esSave = communityEntity.getData();
@@ -339,6 +362,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 ((ObjectNode) esSave).put(Constants.UPDATED_ON, String.valueOf(currentTimestamp));
                 Map<String, Object> map = objectMapper.convertValue(esSave, Map.class);
                 esUtilService.updateDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE, communityId, map, cbServerProperties.getElasticCommunityJsonPath());
+                updateCommunityCountInTopic(category, Constants.DECREMENT);
                 cacheService.deleteCache(communityId);
                 cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
                 cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchPayload()));
@@ -394,6 +418,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                         "Updated the community with id: " + communityId);
                 cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
                 cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchPayload()));
+                cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
                 return response;
 
             } else {
@@ -509,7 +534,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             communityEntity.getCommunityId(), map,
             cbServerProperties.getElasticCommunityJsonPath());
         cacheService.putCache(communityEntity.getCommunityId(), communityEntity.getData());
-        cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
+        cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
     }
 
     @Override
@@ -909,7 +934,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 response.getResult().put(Constants.STATUS, Constants.SUCCESSFULLY_CREATED);
                 response.getResult()
                     .put(Constants.CATEGORY_ID, communityCategorySaved.getCategoryId());
-                cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
+                cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
                 return response;
 
             } else {
@@ -932,7 +957,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     cbServerProperties.getElasticCommunityCategoryJsonPath());
                 response.getResult().put(Constants.STATUS, Constants.SUCCESSFULLY_CREATED);
                 response.getResult().put(Constants.CATEGORY_ID, savedCategory.getCategoryId());
-                cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
+                cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
                 return response;
 
             }
@@ -1022,7 +1047,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     categoryId, map, cbServerProperties.getElasticCommunityCategoryJsonPath());
                 response.getResult().put(Constants.RESPONSE,
                     "Deleted the category with id: " + categoryId);
-                cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
+                cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
                 return response;
 
             } else {
@@ -1088,7 +1113,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     cbServerProperties.getElasticCommunityCategoryJsonPath());
                 response.getResult().put(Constants.RESPONSE,
                     "Updated the category with id: " + categoryDetails.get(Constants.CATEGORY_ID));
-                cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
+                cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
                 return response;
             } else {
                 response.getParams().setErrMsg(Constants.COMMUNITY_ID_NOT_FOUND);
@@ -1575,9 +1600,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_SEARCH);
         try {
             SearchResult searchResult = new SearchResult();
-            if (searchCriteria.isOverrideCache()) {
-                return handleSearchAndCache(searchCriteria, response, Constants.CATEGORY_INDEX_NAME);
-            }
             searchResult = redisTemplate.opsForValue()
                 .get(generateRedisJwtTokenKey(searchCriteria));
             if (searchResult != null) {

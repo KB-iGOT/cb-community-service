@@ -132,7 +132,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         }
         try {
-            validatePayload(Constants.PAYLOAD_VALIDATION_FILE, communityDetails);
+            payloadValidation.validatePayload(Constants.PAYLOAD_VALIDATION_FILE, communityDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);
@@ -307,24 +307,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             throw new CustomException(Constants.ERROR, "error while processing", HttpStatus.INTERNAL_SERVER_ERROR);
         }
         return response;
-    }
-
-    public void validatePayload(String fileName, JsonNode payload) {
-        try {
-            JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance();
-            InputStream schemaStream = schemaFactory.getClass().getResourceAsStream(fileName);
-            JsonSchema schema = schemaFactory.getSchema(schemaStream);
-            Set<ValidationMessage> validationMessages = schema.validate(payload);
-            if (!validationMessages.isEmpty()) {
-                StringBuilder errorMessage = new StringBuilder("Validation error(s): \n");
-                for (ValidationMessage message : validationMessages) {
-                    errorMessage.append(message.getMessage()).append("\n");
-                }
-                throw new CustomException("Validation Error", errorMessage.toString(), HttpStatus.BAD_REQUEST);
-            }
-        } catch (Exception e) {
-            throw new CustomException("Failed to validate payload", e.getMessage(), HttpStatus.BAD_REQUEST);
-        }
     }
 
 
@@ -900,7 +882,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         }
         try {
-            validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
+            payloadValidation.validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);
@@ -1078,7 +1060,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         }
         try {
-            validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
+            payloadValidation.validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);

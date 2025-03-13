@@ -169,19 +169,19 @@
       "type": "string"
     },
     "moderators": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "moderatorId": {
-          "type": "string"
-        },
-        "moderatorName": {
-          "type": "string"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "moderatorId": {
+            "type": "string"
+          },
+          "moderatorName": {
+            "type": "string"
+          }
         }
       }
     }
-  }
 },
   "required": [
     "communityName",

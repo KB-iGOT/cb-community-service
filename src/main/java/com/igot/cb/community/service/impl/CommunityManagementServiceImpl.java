@@ -112,7 +112,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
     private BaseStorageService storageService = null;
 
-    //@PostConstruct
+    @PostConstruct
     public void init() {
         if (storageService == null) {
             storageService = StorageServiceFactory.getStorageService(new StorageConfig(cbServerProperties.getCloudStorageTypeName(), cbServerProperties.getCloudStorageKey(), cbServerProperties.getCloudStorageSecret().replace("\\n", "\n"), Option.apply(cbServerProperties.getCloudStorageEndpoint()), Option.empty()));
@@ -163,12 +163,13 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             List<String> searchTags = new ArrayList<>();
             searchTags.add(communityDetails.get(Constants.COMMUNITY_NAME).textValue().toLowerCase());
             ArrayNode searchTagsArray = objectMapper.valueToTree(searchTags);
-            ((ObjectNode) communityDetails).put(Constants.STATUS, Constants.ACTIVE);
+            ((ObjectNode) communityDetails).put(Constants.STATUS, Constants.DRAFT);
             ((ObjectNode) communityDetails).put(Constants.COMMUNITY_ID, communityId);
             ((ObjectNode) communityDetails).put(Constants.COUNT_OF_PEOPLE_JOINED, 0L);
             ((ObjectNode) communityDetails).put(Constants.COUNT_OF_PEOPLE_LIKED, 0L);
             ((ObjectNode) communityDetails).put(Constants.COUNT_OF_POST_CREATED, 0L);
             ((ObjectNode) communityDetails).put(Constants.COUNT_OF_ANSWER_POST_CREATED, 0L);
+            ((ObjectNode) communityDetails).put(Constants.NO_OF_MODERATORS, 0L);
             ((ObjectNode) communityDetails).put(Constants.CREATED_BY, userId);
             ((ObjectNode) communityDetails).put(Constants.UPDATED_BY, userId);
             ((ObjectNode) communityDetails).putArray(Constants.SEARCHTAGS)
@@ -252,10 +253,8 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
     private JsonNode addExtraproperties(JsonNode saveJsonEntity, String id, Timestamp currentTime) {
         ObjectNode modifiedNode = (ObjectNode) saveJsonEntity; // Create a mutable copy of the JsonNode
-        modifiedNode.put(Constants.COMMUNITY_ID, id);
         modifiedNode.put(Constants.CREATED_ON, String.valueOf(currentTime));
         modifiedNode.put(Constants.UPDATED_ON, String.valueOf(currentTime));
-        modifiedNode.put(Constants.STATUS, Constants.ACTIVE);
         return modifiedNode;
     }
 
@@ -413,7 +412,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                         ((ObjectNode) dataNode).put(fieldName, communityDetails.get(fieldName));
                     }
                 }
-                updateCommunityDetails(communityEntityOptional.get(),userId,dataNode);
+                updateCommunityDetails(communityEntityOptional.get(),userId,dataNode, Constants.DRAFT);
                 response.getResult().put(Constants.RESPONSE,
                         "Updated the community with id: " + communityId);
                 cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
@@ -521,19 +520,29 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
     }
 
     private void updateCommunityDetails(CommunityEntity communityEntity, String userId,
-        JsonNode dataNode) {
+        JsonNode dataNode, String status) {
         Timestamp currentTime = new Timestamp(System.currentTimeMillis());
         communityEntity.setUpdatedOn(currentTime);
         ((ObjectNode) dataNode).put(Constants.UPDATED_ON, String.valueOf(currentTime));
         ((ObjectNode) dataNode).put(Constants.UPDATED_BY, userId);
-        ((ObjectNode) dataNode).put(Constants.STATUS, Constants.ACTIVE);
+        ((ObjectNode) dataNode).put(Constants.STATUS, status);
         ((ObjectNode) dataNode).put(Constants.COMMUNITY_ID, communityEntity.getCommunityId());
+        // Fetch and set countOfModerators
+        if (dataNode.hasNonNull(Constants.MODERATORS) && dataNode.get(Constants.MODERATORS)
+            .isArray()) {
+            JsonNode moderatorsNode = dataNode.get(Constants.MODERATORS);
+            long countOfModerators = moderatorsNode.size();
+            ((ObjectNode) dataNode).put(Constants.NO_OF_MODERATORS, countOfModerators);
+        } else {
+            ((ObjectNode) dataNode).put(Constants.NO_OF_MODERATORS, 0L);
+        }
+
         communityEngagementRepository.save(communityEntity);
         Map<String, Object> map = objectMapper.convertValue(dataNode, Map.class);
         esUtilService.updateDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE,
             communityEntity.getCommunityId(), map,
             cbServerProperties.getElasticCommunityJsonPath());
-        cacheService.putCache(communityEntity.getCommunityId(), communityEntity.getData());
+                                                                                                                                                                                        cacheService.putCache(communityEntity.getCommunityId(), communityEntity.getData());
         cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
     }
 
@@ -837,7 +846,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 JsonNode dataNode = optCommunity.get().getData();
                 ((ObjectNode) dataNode).put(Constants.COUNT_OF_PEOPLE_JOINED,
                     dataNode.get(Constants.COUNT_OF_PEOPLE_JOINED).asInt() - 1);
-                updateCommunityDetails(optCommunity.get(), userId, dataNode);
+                updateCommunityDetails(optCommunity.get(), userId, dataNode, Constants.ACTIVE);
                 // Delete the key from Redis
                 cacheService.deleteUserFromHash(Constants.CMMUNITY_USER_REDIS_PREFIX+communityId,Constants.USER_PREFIX+userId);
                 esUtilService.updateUserIndex(userId,communityId,false);
@@ -1618,6 +1627,69 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return handleSearchAndCache(searchCriteria, response, Constants.CATEGORY_INDEX_NAME);
         } catch (Exception e) {
             logger.error("Error occured while searching:", e);
+            throw new CustomException(Constants.ERROR, "error while processing",
+                HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Override
+    public ApiResponse publish(JsonNode communityDetails, String authToken) {
+        log.info("CommunityEngagementService:publish::inside method");
+        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_PUBLISH);
+        String userId = accessTokenValidator.verifyUserToken(authToken);
+        if (StringUtils.isBlank(userId)) {
+            response.getParams().setStatus(Constants.FAILED);
+            response.getParams().setErrMsg(Constants.USER_ID_DOESNT_EXIST);
+            response.setResponseCode(HttpStatus.BAD_REQUEST);
+            return response;
+        }
+        try {
+            validatePayload(Constants.COMMUNITY_PUBLISH_PAYLOAD_VALIDATION_FILE, communityDetails);
+        } catch (CustomException e) {
+            log.error("Validation failed: {}", e.getMessage(), e);
+            response.getParams().setStatus(Constants.FAILED);
+            response.getParams().setErrMsg(e.getMessage());
+            response.setResponseCode(HttpStatus.BAD_REQUEST);
+            return response;
+        }
+        try {
+            String communityId = communityDetails.get(Constants.COMMUNITY_ID).asText();
+            Optional<CommunityEntity> communityEntityOptional = communityEngagementRepository.findByCommunityIdAndIsActive(
+                communityId, true);
+            if (!communityEntityOptional.isPresent()) {
+                response.getParams().setErrMsg(Constants.INVALID_COMMUNITY_ID);
+                response.setResponseCode(HttpStatus.BAD_REQUEST);
+                return response;
+            }
+            JsonNode dataNode = communityEntityOptional.get().getData();
+            Iterator<Map.Entry<String, JsonNode>> fields = communityDetails.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                String fieldName = field.getKey();
+                // Check if the field is present in the update JsonNode
+                if (dataNode.has(fieldName)) {
+                    // Update the main JsonNode with the value from the update JsonNode
+                    ((ObjectNode) dataNode).set(fieldName, communityDetails.get(fieldName));
+                } else {
+                    ((ObjectNode) dataNode).put(fieldName, communityDetails.get(fieldName));
+                }
+            }
+            Timestamp currentTime = new Timestamp(System.currentTimeMillis());
+            ((ObjectNode) dataNode).put(Constants.PUBLISHED_ON, String.valueOf(currentTime));
+            ((ObjectNode) dataNode).put(Constants.PUBLISHED_BY, userId);
+            updateCommunityDetails(communityEntityOptional.get(), userId, dataNode,
+                Constants.ACTIVE);
+            response.getResult().put(Constants.RESPONSE,
+                "Published the community with id: " + communityId);
+            cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchPayload()));
+            cacheService.deleteCache(
+                generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
+            return response;
+
+
+        } catch (Exception e) {
+            logger.error("Error while publishing community {}: {}",
+                communityDetails.has(Constants.COMMUNITY_ID), e.getMessage(), e);
             throw new CustomException(Constants.ERROR, "error while processing",
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }

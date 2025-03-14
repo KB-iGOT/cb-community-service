@@ -189,6 +189,14 @@ public class Constants {
     public static final String API_POPULAR_COMMUNITY = "api.popular communities";
     public static final String COUNT_OF_COMMUNITIES = "countOfCommunities";
     public static final String TOPIC_IS_INACTIVE = "Topic is inactive";
+    public static final String TABLE_USER = "user";
+    public static final String ROOT_ORG_ID = "rootOrgId";
+    public static final String FIRST_NAME = "firstname";
+    public static final String USER_ROOT_ORG_ID = "rootorgid";
+    public static final String USER_DETAILS_NOT_FOUND = "User details not found with userId";
+    public static final String ORG_TABLE = "organisation";
+    public static final String ORG_DETAILS_NOT_FOUND = "OrgDetails are not fetched for given orgId";
+    public static final String ORG_NAME_CAMEL_CASE = "orgName";
 
     private Constants() {
     }

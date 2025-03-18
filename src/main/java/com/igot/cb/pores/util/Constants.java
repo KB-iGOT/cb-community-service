@@ -195,6 +195,13 @@ public class Constants {
     public static final String ORG_TABLE = "organisation";
     public static final String ORG_DETAILS_NOT_FOUND = "OrgDetails are not fetched for given orgId";
     public static final String ORG_NAME_CAMEL_CASE = "orgName";
+    public static final String DRAFT = "draft";
+    public static final String PUBLISHED_ON = "publishedOn";
+    public static final String NO_OF_MODERATORS = "countOfModerators";
+    public static final String API_COMMUNITY_PUBLISH = "api.community.publish";
+    public static final String COMMUNITY_PUBLISH_PAYLOAD_VALIDATION_FILE = "/payloadValidation/communityPublishPayloadValidation.json";
+    public static final String PUBLISHED_BY = "publishedBy";
+    public static final String  MODERATORS = "moderators";
 
     private Constants() {
     }

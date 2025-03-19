@@ -120,7 +120,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
     private BaseStorageService storageService = null;
 
-    @PostConstruct
+//    @PostConstruct
     public void init() {
         if (storageService == null) {
             storageService = StorageServiceFactory.getStorageService(new StorageConfig(cbServerProperties.getCloudStorageTypeName(), cbServerProperties.getCloudStorageKey(), cbServerProperties.getCloudStorageSecret().replace("\\n", "\n"), Option.apply(cbServerProperties.getCloudStorageEndpoint()), Option.empty()));
@@ -259,6 +259,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             categoryRepository.save(category);
             Map<String, Object> communityDetailsMap = objectMapper.convertValue(category,
                 Map.class);
+            communityDetailsMap.put(Constants.STATUS, Constants.ACTIVE);
             esUtilService.addDocument(communityCategoryIndex, Constants.INDEX_TYPE,
                 String.valueOf(category.getCategoryId()), communityDetailsMap,
                 cbServerProperties.getElasticCommunityCategoryJsonPath());
@@ -1684,7 +1685,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         }
         try {
-            validatePayload(Constants.COMMUNITY_PUBLISH_PAYLOAD_VALIDATION_FILE, communityDetails);
+            payloadValidation.validatePayload(Constants.COMMUNITY_PUBLISH_PAYLOAD_VALIDATION_FILE, communityDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);

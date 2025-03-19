@@ -549,7 +549,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         ((ObjectNode) dataNode).put(Constants.UPDATED_BY, userId);
         ((ObjectNode) dataNode).put(Constants.STATUS, status);
         ((ObjectNode) dataNode).put(Constants.COMMUNITY_ID, communityEntity.getCommunityId());
-        // Fetch and set countOfModerators
         if (dataNode.hasNonNull(Constants.MODERATORS) && dataNode.get(Constants.MODERATORS)
             .isArray()) {
             JsonNode moderatorsNode = dataNode.get(Constants.MODERATORS);

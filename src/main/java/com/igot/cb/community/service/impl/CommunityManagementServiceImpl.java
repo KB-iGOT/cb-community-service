@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
@@ -107,6 +108,13 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
     @Value("${no.of.popular.community}")
     private Integer noOfPopularCommunities;
+
+    @Value("${community.category.index}")
+    private String communityCategoryIndex;
+
+    @Value("${community.index}")
+    private String communityIndex;
+
     @Autowired
     private RedisTemplate<String, Object> objectRedisTemplate;
 
@@ -132,7 +140,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         }
         try {
-            validatePayload(Constants.PAYLOAD_VALIDATION_FILE, communityDetails);
+            payloadValidation.validatePayload(Constants.PAYLOAD_VALIDATION_FILE, communityDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);
@@ -150,12 +158,42 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 response.setResponseCode(HttpStatus.BAD_REQUEST);
                 return response;
             }
-            if (esUtilService.doesCommunityExist(communityDetails.get(Constants.ORG_ID).asText(),
+            List<Map<String, Object>> userDetails;
+            Map<String, Object> propertyMap = new HashMap<>();
+            propertyMap.put(Constants.ID, userId);
+            userDetails = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+                Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
+                Arrays.asList(Constants.ROOT_ORG_ID, Constants.FIRST_NAME), 2);
+            String userRootOrgId = null;
+            if (!CollectionUtils.isEmpty(userDetails)) {
+                userRootOrgId = (String) userDetails.get(0).get(Constants.USER_ROOT_ORG_ID);
+            } else {
+                log.error("User details not found in Cassandra for validating user{}", userId);
+                response.getParams().setErrMsg(Constants.USER_DETAILS_NOT_FOUND);
+                response.setResponseCode(HttpStatus.BAD_REQUEST);
+                return response;
+            }
+
+            if (esUtilService.doesCommunityExist(userRootOrgId,
                 communityDetails.get(Constants.COMMUNITY_NAME).asText(), communityDetails.get(Constants.TOPIC_ID).asLong())) {
                 response.getParams().setStatus(Constants.FAILED);
                 response.getParams().setErrMsg("Community with the given orgId and communityName already exists in this topic. or its in blocked state.");
                 response.setResponseCode(HttpStatus.CONFLICT);
                 return response;
+            }
+            Map<String, Object> propertyMapOrg = new HashMap<>();
+            propertyMap.put(Constants.ID, userRootOrgId);
+            List<Map<String, Object>> orgDetails = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+                Constants.KEYSPACE_SUNBIRD, Constants.ORG_TABLE, propertyMapOrg, null, 1);
+            if (ObjectUtils.isEmpty(orgDetails)) {
+                response.getParams().setErrMsg(Constants.ORG_DETAILS_NOT_FOUND);
+                response.setResponseCode(HttpStatus.NOT_FOUND);
+                return response;
+            }
+            if (orgDetails.get(0).containsKey(Constants.ORG_NAME)
+                && orgDetails.get(0).get(Constants.ORG_NAME) != null) {
+                ((ObjectNode) communityDetails).put(Constants.ORG_NAME_CAMEL_CASE,
+                    orgDetails.get(0).get(Constants.ORG_NAME).toString());
             }
             String communityId = UUID.randomUUID().toString();
             CommunityEntity communityEngagementEntity = new CommunityEntity();
@@ -174,6 +212,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             ((ObjectNode) communityDetails).put(Constants.UPDATED_BY, userId);
             ((ObjectNode) communityDetails).putArray(Constants.SEARCHTAGS)
                 .add(searchTagsArray);
+            ((ObjectNode) communityDetails).put(Constants.ORG_ID, userRootOrgId);
             communityEngagementEntity.setData(communityDetails);
             Timestamp currentTimestamp = new Timestamp(System.currentTimeMillis());
             communityEngagementEntity.setCreatedOn(currentTimestamp);
@@ -184,7 +223,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             if (!saveJsonEntity.getData().isNull()) {
                 communityDetails = addExtraproperties(saveJsonEntity.getData(), communityId, currentTimestamp);
                 Map<String, Object> communityDetailsMap = objectMapper.convertValue(communityDetails, Map.class);
-                esUtilService.addDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE, communityId, communityDetailsMap, cbServerProperties.getElasticCommunityJsonPath());
+                esUtilService.addDocument(communityIndex, Constants.INDEX_TYPE, communityId, communityDetailsMap, cbServerProperties.getElasticCommunityJsonPath());
                 cacheService.putCache(communityId, communityDetailsMap);
                 log.info(
                         "created community");
@@ -220,7 +259,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             categoryRepository.save(category);
             Map<String, Object> communityDetailsMap = objectMapper.convertValue(category,
                 Map.class);
-            esUtilService.addDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
+            esUtilService.addDocument(communityCategoryIndex, Constants.INDEX_TYPE,
                 String.valueOf(category.getCategoryId()), communityDetailsMap,
                 cbServerProperties.getElasticCommunityCategoryJsonPath());
             cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchCriteriaForTopic()));
@@ -308,24 +347,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         return response;
     }
 
-    public void validatePayload(String fileName, JsonNode payload) {
-        try {
-            JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance();
-            InputStream schemaStream = schemaFactory.getClass().getResourceAsStream(fileName);
-            JsonSchema schema = schemaFactory.getSchema(schemaStream);
-            Set<ValidationMessage> validationMessages = schema.validate(payload);
-            if (!validationMessages.isEmpty()) {
-                StringBuilder errorMessage = new StringBuilder("Validation error(s): \n");
-                for (ValidationMessage message : validationMessages) {
-                    errorMessage.append(message.getMessage()).append("\n");
-                }
-                throw new CustomException("Validation Error", errorMessage.toString(), HttpStatus.BAD_REQUEST);
-            }
-        } catch (Exception e) {
-            throw new CustomException("Failed to validate payload", e.getMessage(), HttpStatus.BAD_REQUEST);
-        }
-    }
-
 
     public ApiResponse delete(String communityId, String authToken) {
         log.info("CommunityEngagementService:delete:deleting community");
@@ -360,7 +381,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 Timestamp currentTimestamp = new Timestamp(System.currentTimeMillis());
                 ((ObjectNode) esSave).put(Constants.UPDATED_ON, String.valueOf(currentTimestamp));
                 Map<String, Object> map = objectMapper.convertValue(esSave, Map.class);
-                esUtilService.updateDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE, communityId, map, cbServerProperties.getElasticCommunityJsonPath());
+                esUtilService.updateDocument(communityIndex, Constants.INDEX_TYPE, communityId, map, cbServerProperties.getElasticCommunityJsonPath());
                 updateCommunityCountInTopic(category, Constants.DECREMENT);
                 cacheService.deleteCache(communityId);
                 cacheService.deleteCache(Constants.CATEGORY_LIST_ALL_REDIS_KEY_PREFIX);
@@ -539,7 +560,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
         communityEngagementRepository.save(communityEntity);
         Map<String, Object> map = objectMapper.convertValue(dataNode, Map.class);
-        esUtilService.updateDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE,
+        esUtilService.updateDocument(communityIndex, Constants.INDEX_TYPE,
             communityEntity.getCommunityId(), map,
             cbServerProperties.getElasticCommunityJsonPath());
                                                                                                                                                                                         cacheService.putCache(communityEntity.getCommunityId(), communityEntity.getData());
@@ -872,7 +893,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         try {
             SearchResult searchResult = new SearchResult();
             if (searchCriteria.isOverrideCache()) {
-                return handleSearchAndCache(searchCriteria, response, Constants.INDEX_NAME);
+                return handleSearchAndCache(searchCriteria, response, communityIndex);
             }
             searchResult = redisTemplate.opsForValue()
                 .get(generateRedisJwtTokenKey(searchCriteria));
@@ -889,7 +910,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     HttpStatus.BAD_REQUEST, Constants.FAILED_CONST);
                 return response;
             }
-            return handleSearchAndCache(searchCriteria, response, Constants.INDEX_NAME);
+            return handleSearchAndCache(searchCriteria, response, communityIndex);
         } catch (Exception e) {
             logger.error("Error occured while searching:", e);
             throw new CustomException(Constants.ERROR, "error while processing",
@@ -908,8 +929,25 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             response.setResponseCode(HttpStatus.BAD_REQUEST);
             return response;
         }
+        List<Map<String, Object>> userDetails;
+        Map<String, Object> propertyMap = new HashMap<>();
+        propertyMap.put(Constants.ID, userId);
+        userDetails = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+            Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
+            Arrays.asList(Constants.ROOT_ORG_ID, Constants.FIRST_NAME), 2);
+        String userRootOrgId = (!CollectionUtils.isEmpty(userDetails) &&
+            userDetails.get(0).get(Constants.USER_ROOT_ORG_ID) != null)
+            ? (String) userDetails.get(0).get(Constants.USER_ROOT_ORG_ID)
+            : null;
+        if (Objects.isNull(userRootOrgId)) {
+            log.error("User Root Org ID is missing or null for user{}", userId);
+            response.getParams().setErrMsg(Constants.USER_DETAILS_NOT_FOUND);
+            response.setResponseCode(HttpStatus.BAD_REQUEST);
+            return response;
+        }
+
         try {
-            validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
+            payloadValidation.validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);
@@ -933,11 +971,11 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     return response;
                 }
                 CommunityCategory communityCategorySaved = persistCategoryInPrimary(categoryDetails,
-                    categoryDetails.get(Constants.PARENT_ID).asInt(), userId, currentTimestamp);
+                    categoryDetails.get(Constants.PARENT_ID).asInt(), userId, currentTimestamp, userRootOrgId);
 
                 Map<String, Object> communityDetailsMap = objectMapper.convertValue(categoryDetails,
                     Map.class);
-                esUtilService.updateDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
+                esUtilService.updateDocument(communityCategoryIndex, Constants.INDEX_TYPE,
                     String.valueOf(communityCategorySaved.getCategoryId()), communityDetailsMap,
                     cbServerProperties.getElasticCommunityCategoryJsonPath());
                 response.getResult().put(Constants.STATUS, Constants.SUCCESSFULLY_CREATED);
@@ -958,10 +996,12 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     return response;
                 }
                 CommunityCategory savedCategory = persistCategoryInPrimary(categoryDetails, 0,
-                    userId, currentTimestamp);
-                Map<String, Object> communityDetailsMap = objectMapper.convertValue(categoryDetails,
+                    userId, currentTimestamp, userRootOrgId);
+                Map<String, Object> communityDetailsMap = objectMapper.convertValue(savedCategory,
                     Map.class);
-                esUtilService.addDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
+                communityDetailsMap.put(Constants.CATEGORY_ID, savedCategory.getCategoryId());
+                communityDetailsMap.put(Constants.STATUS, Constants.ACTIVE);
+                esUtilService.addDocument(communityCategoryIndex, Constants.INDEX_TYPE,
                     String.valueOf(savedCategory.getCategoryId()), communityDetailsMap,
                     cbServerProperties.getElasticCommunityCategoryJsonPath());
                 response.getResult().put(Constants.STATUS, Constants.SUCCESSFULLY_CREATED);
@@ -1052,7 +1092,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 ((ObjectNode) esSave).put(Constants.STATUS, Constants.INACTIVE);
                 ((ObjectNode) esSave).put(Constants.UPDATED_ON, String.valueOf(currentTimestamp));
                 Map<String, Object> map = objectMapper.convertValue(esSave, Map.class);
-                esUtilService.updateDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
+                esUtilService.updateDocument(communityCategoryIndex, Constants.INDEX_TYPE,
                     categoryId, map, cbServerProperties.getElasticCommunityCategoryJsonPath());
                 response.getResult().put(Constants.RESPONSE,
                     "Deleted the category with id: " + categoryId);
@@ -1087,7 +1127,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         }
         try {
-            validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
+            payloadValidation.validatePayload(Constants.CATEGORY_PAYLOAD_VALIDATION_FILE, categoryDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);
@@ -1117,7 +1157,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 ((ObjectNode) esSave).put(Constants.STATUS, Constants.ACTIVE);
                 ((ObjectNode) esSave).put(Constants.UPDATED_ON, String.valueOf(currentTimestamp));
                 Map<String, Object> map = objectMapper.convertValue(esSave, Map.class);
-                esUtilService.updateDocument(Constants.CATEGORY_INDEX_NAME, Constants.INDEX_TYPE,
+                esUtilService.updateDocument(communityCategoryIndex, Constants.INDEX_TYPE,
                     String.valueOf(categoryDetails.get(Constants.CATEGORY_ID)), map,
                     cbServerProperties.getElasticCommunityCategoryJsonPath());
                 response.getResult().put(Constants.RESPONSE,
@@ -1221,7 +1261,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                         HttpStatus.BAD_REQUEST, Constants.FAILED_CONST);
                     return response;
                 }
-                searchResult = esUtilService.searchDocuments(Constants.CATEGORY_INDEX_NAME,
+                searchResult = esUtilService.searchDocuments(communityCategoryIndex,
                     searchCriteria);
                 redisTemplate.opsForValue().set(
                     generateRedisJwtTokenKey(searchCriteria),
@@ -1282,7 +1322,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 .map(CommunityCategory::getCategoryId) // Assuming getId() retrieves the ID
                 .collect(Collectors.toList());
             SearchResult searchResult
-                = esUtilService.fetchTopCommunitiesForTopics(topicIds, Constants.INDEX_NAME);
+                = esUtilService.fetchTopCommunitiesForTopics(topicIds, communityIndex);
             if (!searchResult.getData().isEmpty()) {
                 List<Map<String, Object>> documents;
                 documents = objectMapper.convertValue(
@@ -1403,7 +1443,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             searchSourceBuilder.aggregation(aggregationBuilder);
 
             // Create the search request
-            SearchRequest searchRequest = new SearchRequest(Constants.INDEX_NAME);
+            SearchRequest searchRequest = new SearchRequest(communityIndex);
             searchRequest.source(searchSourceBuilder);
 
             // Execute the search request
@@ -1553,7 +1593,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             communityEngagementRepository.save(communityEntity);
             jsonNode.setAll(data);
             Map<String, Object> map = objectMapper.convertValue(jsonNode, Map.class);
-            esUtilService.updateDocument(Constants.INDEX_NAME, Constants.INDEX_TYPE, communityId,
+            esUtilService.updateDocument(communityIndex, Constants.INDEX_TYPE, communityId,
                 map, cbServerProperties.getElasticCommunityJsonPath());
             cacheService.putCache(Constants.REDIS_KEY_PREFIX + communityId, jsonNode);
             map.put(Constants.COMMUNITY_ID, reportData.get(Constants.COMMUNITY_ID));
@@ -1624,7 +1664,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     HttpStatus.BAD_REQUEST, Constants.FAILED_CONST);
                 return response;
             }
-            return handleSearchAndCache(searchCriteria, response, Constants.CATEGORY_INDEX_NAME);
+            return handleSearchAndCache(searchCriteria, response, communityCategoryIndex);
         } catch (Exception e) {
             logger.error("Error occured while searching:", e);
             throw new CustomException(Constants.ERROR, "error while processing",
@@ -1747,7 +1787,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
 
     private CommunityCategory persistCategoryInPrimary(JsonNode categoryDetails, Integer parentId,
-        String userId, Timestamp currentTimestamp) {
+        String userId, Timestamp currentTimestamp, String userRootOrgId) {
         log.info("CommunityEngagementService:persistCategoryInPimaryAndEs:saving");
         CommunityCategory communityCategory = new CommunityCategory();
         communityCategory.setCategoryName(categoryDetails.get(Constants.CATEGORY_NAME).asText());
@@ -1755,6 +1795,8 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         communityCategory.setParentId(parentId);
         communityCategory.setCreatedAt(currentTimestamp);
         communityCategory.setCountOfCommunities(0L);
+        communityCategory.setDepartmentId(userRootOrgId);
+
         // Save to the repository and fetch the generated ID
         return categoryRepository.save(communityCategory);
 

@@ -57,10 +57,10 @@
         "epoch_millis"
       ]
     },
-    "createdUserId": {
+    "createdBy": {
       "type": "string"
     },
-    "updatedUserId": {
+    "updatedBy": {
       "type": "string"
     },
     "communityGuideLines": {
@@ -162,7 +162,7 @@
     "countOfAnswerPost": {
       "type": "integer"
     },
-    "createdByUserId": {
+    "createdBy": {
       "type": "string"
     },
     "orgName": {
@@ -190,13 +190,17 @@
     "orgId",
     "topicName",
     "topicId",
-    "createdUserId",
+    "createdBy",
     "orgName",
     "communityId",
     "competencies_v6",
     "imageUrl",
     "communityGuideLines",
-    "moderators"
+    "moderators",
+    "competencyArea",
+    "competencyTheme",
+    "competencySubTheme",
+    "updatedBy"
   ],
   "additionalProperties": false
 }

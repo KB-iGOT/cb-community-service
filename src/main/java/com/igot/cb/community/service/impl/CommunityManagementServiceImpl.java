@@ -182,7 +182,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 return response;
             }
             Map<String, Object> propertyMapOrg = new HashMap<>();
-            propertyMap.put(Constants.ID, userRootOrgId);
+            propertyMapOrg.put(Constants.ID, userRootOrgId);
             List<Map<String, Object>> orgDetails = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
                 Constants.KEYSPACE_SUNBIRD, Constants.ORG_TABLE, propertyMapOrg, null, 1);
             if (ObjectUtils.isEmpty(orgDetails)) {
@@ -259,6 +259,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             categoryRepository.save(category);
             Map<String, Object> communityDetailsMap = objectMapper.convertValue(category,
                 Map.class);
+            communityDetailsMap.put(Constants.STATUS, Constants.ACTIVE);
             esUtilService.addDocument(communityCategoryIndex, Constants.INDEX_TYPE,
                 String.valueOf(category.getCategoryId()), communityDetailsMap,
                 cbServerProperties.getElasticCommunityCategoryJsonPath());
@@ -548,7 +549,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         ((ObjectNode) dataNode).put(Constants.UPDATED_BY, userId);
         ((ObjectNode) dataNode).put(Constants.STATUS, status);
         ((ObjectNode) dataNode).put(Constants.COMMUNITY_ID, communityEntity.getCommunityId());
-        // Fetch and set countOfModerators
         if (dataNode.hasNonNull(Constants.MODERATORS) && dataNode.get(Constants.MODERATORS)
             .isArray()) {
             JsonNode moderatorsNode = dataNode.get(Constants.MODERATORS);
@@ -1684,7 +1684,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         }
         try {
-            validatePayload(Constants.COMMUNITY_PUBLISH_PAYLOAD_VALIDATION_FILE, communityDetails);
+            payloadValidation.validatePayload(Constants.COMMUNITY_PUBLISH_PAYLOAD_VALIDATION_FILE, communityDetails);
         } catch (CustomException e) {
             log.error("Validation failed: {}", e.getMessage(), e);
             response.getParams().setStatus(Constants.FAILED);

@@ -15,6 +15,7 @@ import com.igot.cb.community.kafka.producer.Producer;
 import com.igot.cb.community.repository.CommunityCategoryRepository;
 import com.igot.cb.community.repository.CommunityEngagementRepository;
 import com.igot.cb.community.service.CommunityManagementService;
+import com.igot.cb.community.service.UserService;
 import com.igot.cb.pores.cache.CacheService;
 import com.igot.cb.pores.elasticsearch.dto.SearchCriteria;
 import com.igot.cb.pores.elasticsearch.dto.SearchResult;
@@ -120,6 +121,9 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
     private RedisTemplate<String, Object> objectRedisTemplate;
 
     private BaseStorageService storageService = null;
+
+    @Autowired
+    private UserService userService;
 
     @PostConstruct
     public void init() {
@@ -730,7 +734,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 .collect(Collectors.toList());
 
             if (!missingUserIds.isEmpty()) {
-                List<Object> cassandraResults = fetchUserFromprimary(missingUserIds);
+                List<Object> cassandraResults = userService.fetchUserFromprimary(missingUserIds);
                 userList.addAll(cassandraResults);
             }
             response.getResult().put(Constants.USER_DETAILS,
@@ -1888,98 +1892,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             str.append("Failed Due To Missing Params - ").append(errList).append(".");
         }
         return str.toString();
-    }
-
-    public List<Object> fetchUserFromprimary(List<String> userIds) {
-        List<Object> userList = new ArrayList<>();
-        Map<String, Object> propertyMap = new HashMap<>();
-        propertyMap.put(Constants.ID, userIds);
-        List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
-            Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
-            Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID, Constants.CHANNEL), null);
-
-        userList = userInfoList.stream()
-            .map(userInfo -> {
-                Map<String, Object> userMap = new HashMap<>();
-
-                // Extract user ID and user name
-                String userId = (String) userInfo.get(Constants.ID);
-                String userName = (String) userInfo.get(Constants.FIRST_NAME);
-
-                userMap.put(Constants.USER_ID_KEY, userId);
-                userMap.put(Constants.FIRST_NAME_KEY, userName);
-                userMap.put(Constants.DEPARTMENT, userInfo.get(Constants.CHANNEL));
-
-                // Process profile details if present
-                String profileDetails = (String) userInfo.get(Constants.PROFILE_DETAILS);
-                if (StringUtils.isNotBlank(profileDetails)) {
-                    try {
-                        // Convert JSON profile details to a Map
-                        Map<String, Object> profileDetailsMap = objectMapper.readValue(
-                            profileDetails,
-                            new TypeReference<HashMap<String, Object>>() {
-                            });
-                        userMap.put(Constants.PROFILE_IMG_KEY, "");
-                        userMap.put(Constants.DESIGNATION_KEY, "");
-                        userMap.put(Constants.PROFILE_STATUS, "");
-
-                        // Check for profile image and add to userMap if available
-                        if (MapUtils.isNotEmpty(profileDetailsMap)) {
-                            if (profileDetailsMap.containsKey(Constants.PROFILE_IMG)
-                                && StringUtils.isNotBlank(
-                                (String) profileDetailsMap.get(Constants.PROFILE_IMG))) {
-                                userMap.put(Constants.PROFILE_IMG_KEY,
-                                    (String) profileDetailsMap.get(Constants.PROFILE_IMG));
-                            }
-                            if (profileDetailsMap.containsKey(Constants.PROFESSIONAL_DETAILS)
-                                && ObjectUtils.isNotEmpty(
-                                profileDetailsMap.get(Constants.PROFESSIONAL_DETAILS))) {
-
-                                Object professionalDetailsObj = profileDetailsMap.get(
-                                    Constants.PROFESSIONAL_DETAILS);
-
-                                if (professionalDetailsObj instanceof List<?>) {
-                                    List<?> professionalDetailsList = (List<?>) professionalDetailsObj;
-
-                                    if (!professionalDetailsList.isEmpty()
-                                        && professionalDetailsList.get(0) instanceof Map<?, ?>) {
-                                        Map<?, ?> firstEntry = (Map<?, ?>) professionalDetailsList.get(
-                                            0);
-
-                                        Object designationObj = firstEntry.get(
-                                            Constants.DESIGNATION);
-
-                                        if (designationObj instanceof String) {
-                                            String designation = (String) designationObj;
-
-                                            if (StringUtils.isNotBlank(designation)) {
-                                                userMap.put(Constants.DESIGNATION_KEY, designation);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (profileDetailsMap.containsKey(Constants.PROFILE_STATUS_KEY)
-                                && StringUtils.isNotEmpty(
-                                (String) profileDetailsMap.get(Constants.PROFILE_STATUS_KEY))) {
-
-                                userMap.put(Constants.PROFILE_STATUS,
-                                    (String) profileDetailsMap.get(Constants.PROFILE_STATUS_KEY));
-                            }
-
-                        }
-                    } catch (Exception e) {
-                        logger.error("Exception occured while fetching and caching in search API:", e);
-                        throw new CustomException(Constants.ERROR, "error while processing",
-                            HttpStatus.INTERNAL_SERVER_ERROR);
-                    }
-                }
-
-                return userMap;
-            })
-            .collect(Collectors.toList());
-        return userList;
     }
 
 }

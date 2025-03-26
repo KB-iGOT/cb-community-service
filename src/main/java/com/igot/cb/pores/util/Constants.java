@@ -211,6 +211,8 @@ public class Constants {
     public static final String PROFILE_IMG = "profileImageUrl";
     public static final String PROFILE_STATUS = "userProfileStatus";
     public static final String PROFILE_STATUS_KEY = "profileStatus";
+    public static final String CHANNEL = "channel";
+    public static final String PROFESSIONAL_DETAILS = "professionalDetails";
 
     private Constants() {
     }

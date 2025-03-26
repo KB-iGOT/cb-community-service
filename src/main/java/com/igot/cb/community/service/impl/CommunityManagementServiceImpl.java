@@ -1896,7 +1896,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         propertyMap.put(Constants.ID, userIds);
         List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
             Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
-            Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID), null);
+            Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID, Constants.CHANNEL), null);
 
         userList = userInfoList.stream()
             .map(userInfo -> {
@@ -1908,6 +1908,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
                 userMap.put(Constants.USER_ID_KEY, userId);
                 userMap.put(Constants.FIRST_NAME_KEY, userName);
+                userMap.put(Constants.DEPARTMENT, userInfo.get(Constants.CHANNEL));
 
                 // Process profile details if present
                 String profileDetails = (String) userInfo.get(Constants.PROFILE_DETAILS);
@@ -1920,7 +1921,6 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                             });
                         userMap.put(Constants.PROFILE_IMG_KEY, "");
                         userMap.put(Constants.DESIGNATION_KEY, "");
-                        userMap.put(Constants.DEPARTMENT, "");
                         userMap.put(Constants.PROFILE_STATUS, "");
 
                         // Check for profile image and add to userMap if available
@@ -1931,13 +1931,35 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                                 userMap.put(Constants.PROFILE_IMG_KEY,
                                     (String) profileDetailsMap.get(Constants.PROFILE_IMG));
                             }
-                            if (profileDetailsMap.containsKey(Constants.DESIGNATION_KEY)
-                                && StringUtils.isNotEmpty(
-                                (String) profileDetailsMap.get(Constants.DESIGNATION_KEY))) {
+                            if (profileDetailsMap.containsKey(Constants.PROFESSIONAL_DETAILS)
+                                && ObjectUtils.isNotEmpty(
+                                profileDetailsMap.get(Constants.PROFESSIONAL_DETAILS))) {
 
-                                userMap.put(Constants.DESIGNATION_KEY,
-                                    (String) profileDetailsMap.get(Constants.PROFILE_IMG));
+                                Object professionalDetailsObj = profileDetailsMap.get(
+                                    Constants.PROFESSIONAL_DETAILS);
+
+                                if (professionalDetailsObj instanceof List<?>) {
+                                    List<?> professionalDetailsList = (List<?>) professionalDetailsObj;
+
+                                    if (!professionalDetailsList.isEmpty()
+                                        && professionalDetailsList.get(0) instanceof Map<?, ?>) {
+                                        Map<?, ?> firstEntry = (Map<?, ?>) professionalDetailsList.get(
+                                            0);
+
+                                        Object designationObj = firstEntry.get(
+                                            Constants.DESIGNATION);
+
+                                        if (designationObj instanceof String) {
+                                            String designation = (String) designationObj;
+
+                                            if (StringUtils.isNotBlank(designation)) {
+                                                userMap.put(Constants.DESIGNATION_KEY, designation);
+                                            }
+                                        }
+                                    }
+                                }
                             }
+
                             if (profileDetailsMap.containsKey(Constants.PROFILE_STATUS_KEY)
                                 && StringUtils.isNotEmpty(
                                 (String) profileDetailsMap.get(Constants.PROFILE_STATUS_KEY))) {
@@ -1945,24 +1967,12 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                                 userMap.put(Constants.PROFILE_STATUS,
                                     (String) profileDetailsMap.get(Constants.PROFILE_STATUS_KEY));
                             }
-                            if (profileDetailsMap.containsKey(Constants.EMPLOYMENT_DETAILS)
-                                && MapUtils.isNotEmpty(
-                                (Map<?, ?>) profileDetailsMap.get(Constants.EMPLOYMENT_DETAILS))
-                                && ((Map<?, ?>) profileDetailsMap.get(
-                                Constants.EMPLOYMENT_DETAILS)).containsKey(Constants.DEPARTMENT_KEY)
-                                && StringUtils.isNotBlank(
-                                (String) ((Map<?, ?>) profileDetailsMap.get(
-                                    Constants.EMPLOYMENT_DETAILS)).get(Constants.DEPARTMENT_KEY))) {
-                                userMap.put(Constants.DEPARTMENT,
-                                    (String) ((Map<?, ?>) profileDetailsMap.get(
-                                        Constants.EMPLOYMENT_DETAILS)).get(
-                                        Constants.DEPARTMENT_KEY));
-
-                            }
 
                         }
-                    } catch (JsonProcessingException e) {
-                        throw new RuntimeException(e);
+                    } catch (Exception e) {
+                        logger.error("Exception occured while fetching and caching in search API:", e);
+                        throw new CustomException(Constants.ERROR, "error while processing",
+                            HttpStatus.INTERNAL_SERVER_ERROR);
                     }
                 }
 

@@ -1990,10 +1990,10 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 JsonNode dataNode = searchResult.getData();
                 if (dataNode != null && dataNode.isArray()) {
                     for (JsonNode item : dataNode) {
-                        if (item.has(Constants.CREATED_BY) && !item.get(Constants.CREATED_BY).isNull()) {
-                            JsonNode createdByNode = item.get(Constants.CREATED_BY);
-                            if (createdByNode.isTextual()) {
-                                uniqueOrgIds.add(createdByNode.asText());
+                        if (item.has(Constants.ORD_ID) && !item.get(Constants.ORD_ID).isNull()) {
+                            JsonNode orgIdNode = item.get(Constants.ORD_ID);
+                            if (orgIdNode.isTextual()) {
+                                uniqueOrgIds.add(orgIdNode.asText());
                             }
                         }
                     }
@@ -2008,6 +2008,13 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 enrichOrgInfo(searchCriteria, searchResult, uniqueOrgIds, orgIdList);
 
             }
+
+            redisTemplate.opsForValue().set(
+                generateRedisJwtTokenKey(searchCriteria),
+                searchResult,
+                cbServerProperties.getSearchResultRedisTtl(),
+                TimeUnit.SECONDS
+            );
             response.getResult().put(Constants.SEARCH_RESULTS, searchResult);
             createSuccessResponse(response);
             return response;

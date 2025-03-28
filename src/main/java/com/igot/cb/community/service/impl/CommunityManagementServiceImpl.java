@@ -1856,46 +1856,50 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         }
     }
 
-    private ApiResponse searchCommunityFromEs(SearchCriteria searchCriteria, ApiResponse response, String communityIndex) {
+    private ApiResponse searchCommunityFromEs(SearchCriteria searchCriteria, ApiResponse response,
+        String communityIndex) {
         try {
             SearchResult searchResult = esUtilService.searchDocuments(Constants.INDEX_NAME,
                 searchCriteria);
-            List<Map<String, Object>> discussions = objectMapper.convertValue(
-                searchResult.getData(),
-                new TypeReference<List<Map<String, Object>>>() {
-                }
-            );
             if (!searchResult.getData().isEmpty()) {
                 Set<String> uniqueOrgIds = new HashSet<>();
                 // Extract 'data' field from searchResult
                 JsonNode dataNode = searchResult.getData();
                 if (dataNode != null && dataNode.isArray()) {
                     for (JsonNode item : dataNode) {
-                        if (item.has(Constants.ORD_ID) && !item.get(Constants.ORD_ID).isNull()) {
-                            JsonNode orgIdNode = item.get(Constants.ORD_ID);
-                            if (orgIdNode.isTextual()) {
-                                uniqueOrgIds.add(orgIdNode.asText());
+                        if (item.has(Constants.CREATED_BY) && !item.get(Constants.CREATED_BY)
+                            .isNull()) {
+                            JsonNode createdByNode = item.get(Constants.CREATED_BY);
+                            if (createdByNode.isTextual()) {
+                                uniqueOrgIds.add(Constants.USER_PREFIX
+                                    + createdByNode.asText()); // Add prefix directly
                             }
                         }
                     }
                 }
-                // Convert Set to List
-                List<String> orgIdList = new ArrayList<>(uniqueOrgIds);
-                Map<String, Object> propertyMap = new HashMap<>();
-                propertyMap.put(Constants.ID, orgIdList);
-//                List<Map<String, Object>> orgInfoList = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
-//                    Constants.KEYSPACE_SUNBIRD, Constants.TABLE_ORGANISATION, propertyMap,
-//                    Arrays.asList(Constants.LOGO, Constants.ORG_NAME, Constants.ID), null);
-                enrichOrgInfo(searchCriteria, searchResult, uniqueOrgIds, orgIdList);
+                List<String> userIdList = new ArrayList<>(
+                    uniqueOrgIds != null ? uniqueOrgIds : Collections.emptySet());
+// Convert Set to List
+                List<Object> userList = fetchDataForKeys(userIdList);
+                if (userList != null) {
+                    userList.replaceAll(obj -> {
+                        if (obj instanceof Map) {
+                            Map<String, Object> map = (Map<String, Object>) obj;
+                            map.computeIfPresent(Constants.DESIGNATION, (k, v) ->
+                                Constants.NULL_STRING.equalsIgnoreCase(String.valueOf(v)) ? "" : v);
+                        }
+                        return obj;
+                    });
+                    List<Map<String, Object>> userInfoList = userList.stream()
+                        .filter(obj -> obj instanceof Map) // Ensure the object is a Map
+                        .map(obj -> (Map<String, Object>) obj) // Cast to Map<String, Object>
+                        .collect(Collectors.toList());
+                    if (userInfoList != null) {
+                        searchResult.setAdditionalInfo(userInfoList);
+                    }
+                }
 
             }
-
-            redisTemplate.opsForValue().set(
-                generateRedisJwtTokenKey(searchCriteria),
-                searchResult,
-                cbServerProperties.getSearchResultRedisTtl(),
-                TimeUnit.SECONDS
-            );
             response.getResult().put(Constants.SEARCH_RESULTS, searchResult);
             createSuccessResponse(response);
             return response;

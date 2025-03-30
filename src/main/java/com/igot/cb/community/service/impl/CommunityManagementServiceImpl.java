@@ -1822,8 +1822,8 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             Timestamp currentTime = new Timestamp(System.currentTimeMillis());
             ((ObjectNode) dataNode).put(Constants.PUBLISHED_ON, String.valueOf(currentTime));
             ((ObjectNode) dataNode).put(Constants.PUBLISHED_BY, userId);
-            updateCommunityDetails(communityEntityOptional.get(), userId, dataNode,
-                Constants.ACTIVE);
+            //updateCommunityDetails(communityEntityOptional.get(), userId, dataNode,
+            //    Constants.ACTIVE);
             response.getResult().put(Constants.RESPONSE,
                 "Published the community with id: " + communityId);
             cacheService.deleteCache(generateRedisJwtTokenKey(createDefaultSearchPayload()));

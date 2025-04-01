@@ -106,7 +106,8 @@ public class NotificationServiceImpl implements NotificationService {
     mailNotificationDetails.put(Constants.SUBJECT, "You Have Been Assigned as a Community Moderator");
     mailNotificationDetails.put(Constants.LINK, link.toString());
     mailNotificationDetails.put(Constants.USER_ID, userId);
-    mailNotificationDetails.put(Constants.USER, senderUserMap.get(userId).get(Constants.FIRST_NAME));
+    mailNotificationDetails.put(Constants.MDO_LEADER_NAME, senderUserMap.get(userId).get(Constants.FIRST_NAME));
+    mailNotificationDetails.put(Constants.COMMUNITY_NAME_TAG, communityName);
     sendNotificationToRecipients(mailNotificationDetails);
   }
 
@@ -117,7 +118,8 @@ public class NotificationServiceImpl implements NotificationService {
     Map<String, Object> templ = new HashMap<>();
     Map<String, Object> usermap = new HashMap<>();
     params.put(Constants.LINK, mailNotificationDetails.get(Constants.LINK));
-    params.put(Constants.PRIMARY_CATEGORY, mailNotificationDetails.get(Constants.PRIMARY_CATEGORY));
+    params.put(Constants.MDO_LEADER_NAME, mailNotificationDetails.get(Constants.MDO_LEADER_NAME));
+    params.put(Constants.COMMUNITY_NAME_TAG, mailNotificationDetails.get(Constants.COMMUNITY_NAME_TAG));
     Template template = new Template(constructEmailTemplate(props.getCommunityModeratorTemplate(), params), props.getCommunityModeratorTemplate(), params);
     usermap.put(Constants.ID, mailNotificationDetails.get(Constants.USER_ID));
     usermap.put(Constants.TYPE, Constants.USER);

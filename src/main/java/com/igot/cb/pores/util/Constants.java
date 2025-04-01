@@ -237,6 +237,8 @@ public class Constants {
     public static final String REQUEST = "request";
     public static final String TABLE_EMAIL_TEMPLATE = "email_template";
     public static final String PRIMARY_EMAIL = "primaryEmail";
+    public static final String MDO_LEADER_NAME = "mdo_leader_name";
+    public static final String COMMUNITY_NAME_TAG = "community_name";
 
     private Constants() {
     }

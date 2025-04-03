@@ -59,4 +59,7 @@ public class CbServerProperties {
     @Value("${domain.url}")
     private String domainUrl;
 
+    @Value("${fixed.community.url}")
+    private String fixedCommunityUrl;
+
 }

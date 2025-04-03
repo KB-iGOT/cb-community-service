@@ -100,7 +100,7 @@ public class NotificationServiceImpl implements NotificationService {
       // Fetch and remove user in a single step
       senderUserMap.put(userId, userListMap.remove(userId));
     }
-    String link = props.getDomainUrl();
+    String link = props.getDomainUrl()+props.getFixedCommunityUrl()+communityId;
     Map<String, Object> mailNotificationDetails = new HashMap<>();
     mailNotificationDetails.put(Constants.SUBJECT, "You Have Been Assigned as a Community Moderator");
     mailNotificationDetails.put(Constants.LINK, link.toString());
@@ -127,6 +127,7 @@ public class NotificationServiceImpl implements NotificationService {
     Map<String, Object> usermap = new HashMap<>();
     params.put(Constants.LINK, mailNotificationDetails.get(Constants.LINK));
     params.put(Constants.MDO_LEADER_NAME, mailNotificationDetails.get(Constants.MDO_LEADER_NAME));
+    params.put(Constants.MODERATOR_NAME, mailNotificationDetails.get(Constants.MODERATOR_NAME));
     params.put(Constants.COMMUNITY_NAME_TAG, mailNotificationDetails.get(Constants.COMMUNITY_NAME_TAG));
     Template template = new Template(constructEmailTemplate(props.getCommunityModeratorTemplate(), params), props.getCommunityModeratorTemplate(), params);
     usermap.put(Constants.ID, mailNotificationDetails.get(Constants.USER_ID));

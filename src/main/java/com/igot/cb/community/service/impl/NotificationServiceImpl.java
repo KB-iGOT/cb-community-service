@@ -102,13 +102,21 @@ public class NotificationServiceImpl implements NotificationService {
     }
     String link = props.getDomainUrl();
     Map<String, Object> mailNotificationDetails = new HashMap<>();
-    mailNotificationDetails.put(Constants.RECIPIENT_EMAILS, emailResponseList);
     mailNotificationDetails.put(Constants.SUBJECT, "You Have Been Assigned as a Community Moderator");
     mailNotificationDetails.put(Constants.LINK, link.toString());
     mailNotificationDetails.put(Constants.USER_ID, userId);
     mailNotificationDetails.put(Constants.MDO_LEADER_NAME, senderUserMap.get(userId).get(Constants.FIRST_NAME));
     mailNotificationDetails.put(Constants.COMMUNITY_NAME_TAG, communityName);
-    sendNotificationToRecipients(mailNotificationDetails);
+
+    // Iterate through the userListMap and send notifications individually
+    userListMap.forEach((id, userMap) -> {
+      String email = (String) userMap.get(Constants.PRIMARY_EMAIL);
+      if (StringUtils.isNotBlank(email)) {
+        mailNotificationDetails.put(Constants.RECIPIENT_EMAILS, Collections.singletonList(email));
+        mailNotificationDetails.put(Constants.MODERATOR_NAME, userMap.get(Constants.FIRST_NAME));
+        sendNotificationToRecipients(mailNotificationDetails);
+      }
+    });
   }
 
   private void sendNotificationToRecipients(Map<String, Object> mailNotificationDetails) {

@@ -30,6 +30,7 @@ import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -48,6 +49,9 @@ public class NotificationServiceImpl implements NotificationService {
 
   @Autowired
   OutboundRequestHandlerServiceImpl outboundRequestHandlerService;
+
+  @Value("${moderator.mail.subject}")
+  private String moderatorMailSubject;
 
   private Logger logger = LoggerFactory.getLogger(NotificationServiceImpl.class);
 
@@ -102,7 +106,7 @@ public class NotificationServiceImpl implements NotificationService {
     }
     String link = props.getDomainUrl()+props.getFixedCommunityUrl()+communityId;
     Map<String, Object> mailNotificationDetails = new HashMap<>();
-    mailNotificationDetails.put(Constants.SUBJECT, "You Have Been Assigned as a Community Moderator");
+    mailNotificationDetails.put(Constants.SUBJECT, moderatorMailSubject);
     mailNotificationDetails.put(Constants.LINK, link.toString());
     mailNotificationDetails.put(Constants.USER_ID, userId);
     mailNotificationDetails.put(Constants.MDO_LEADER_NAME, senderUserMap.get(userId).get(Constants.FIRST_NAME));

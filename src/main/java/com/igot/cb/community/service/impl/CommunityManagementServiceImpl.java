@@ -460,13 +460,17 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 }
                 boolean isCommunityCreationAllowed = false; // Default value
                 if (communityDetails.has(Constants.CommunityCreationAllowed)) {
-                    isCommunityCreationAllowed = communityDetails.get(Constants.CommunityCreationAllowed).asBoolean();
+                    isCommunityCreationAllowed = communityDetails.get(
+                        Constants.CommunityCreationAllowed).asBoolean();
                 }
 
                 if (!isCommunityCreationAllowed) {
-                    if (esUtilService.doesCommunityNameExist(communityDetails.get(Constants.COMMUNITY_NAME).asText())) {
+                    if (esUtilService.doesCommunityNameExistForPublish(
+                        communityDetails.get(Constants.COMMUNITY_NAME).asText(),
+                        dataNode.get(Constants.COMMUNITY_ID).asText())) {
                         response.getParams().setStatus(Constants.FAILED);
-                        response.getParams().setErrMsg("Community with the given communityName already present in another organisation");
+                        response.getParams().setErrMsg(
+                            "Community with the given communityName already present in another organisation");
                         response.setResponseCode(HttpStatus.PRECONDITION_FAILED);
                         return response;
                     }
@@ -1833,13 +1837,17 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             }
             boolean isCommunityCreationAllowed = false; // Default value
             if (communityDetails.has(Constants.CommunityCreationAllowed)) {
-                isCommunityCreationAllowed = communityDetails.get(Constants.CommunityCreationAllowed).asBoolean();
+                isCommunityCreationAllowed = communityDetails.get(
+                    Constants.CommunityCreationAllowed).asBoolean();
             }
 
             if (!isCommunityCreationAllowed) {
-                if (esUtilService.doesCommunityNameExist(communityDetails.get(Constants.COMMUNITY_NAME).asText())) {
+                if (esUtilService.doesCommunityNameExistForPublish(
+                    communityDetails.get(Constants.COMMUNITY_NAME).asText(),
+                    communityDetails.get(Constants.COMMUNITY_ID).asText())) {
                     response.getParams().setStatus(Constants.FAILED);
-                    response.getParams().setErrMsg("Community with the given communityName already present in another organisation");
+                    response.getParams().setErrMsg(
+                        "Community with the given communityName already present in another organisation");
                     response.setResponseCode(HttpStatus.PRECONDITION_FAILED);
                     return response;
                 }

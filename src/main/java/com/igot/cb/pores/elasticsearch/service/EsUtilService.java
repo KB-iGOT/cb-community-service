@@ -44,4 +44,6 @@ public interface EsUtilService {
   boolean isDuplicateCommunity(String orgId, String communityName, String excludeCommunityId);
 
   public Boolean doesCommunityNameExist(String communityName);
+
+  public Boolean doesCommunityNameExistForPublish(String communityName, String communityId);
 }

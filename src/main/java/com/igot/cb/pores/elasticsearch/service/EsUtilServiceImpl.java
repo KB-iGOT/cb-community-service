@@ -308,8 +308,13 @@ public class EsUtilServiceImpl implements EsUtilService {
        // addQueryStringToFilter(searchCriteria.getSearchString(), boolQueryBuilder);
         String searchString = searchCriteria.getSearchString();
         if (isNotBlank(searchString)) {
-            QueryBuilder matchPhraseQuery = getMatchPhraseQuery("searchTags.keyword", searchString, true,boolQueryBuilder);
-            boolQueryBuilder.must(matchPhraseQuery);
+            QueryBuilder communityNameQuery = getMatchPhraseQuery(Constants.COMMUNITY_NAME,
+                searchString, true, boolQueryBuilder);
+            QueryBuilder orgNameQuery = getMatchPhraseQuery(Constants.ORG_NAME_CAMEL_CASE,
+                searchString, true, boolQueryBuilder);
+            boolQueryBuilder.must(QueryBuilders.boolQuery()
+                .should(communityNameQuery)
+                .should(orgNameQuery));
         }
         addFacetsToSearchSourceBuilder(searchCriteria.getFacets(), searchSourceBuilder);
         QueryBuilder queryPart = buildQueryPart(searchCriteria.getQuery());

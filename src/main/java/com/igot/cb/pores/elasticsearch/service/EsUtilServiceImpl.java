@@ -852,7 +852,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             // Check if any documents match the query
             return searchResponse.getHits().getTotalHits() > 0;
         } catch (Exception e) {
-            log.error("Error checking community existence in Elasticsearch: {}", e.getMessage(), e);
+            log.error("Error checking community existence in Elasticsearch: {}", e);
             return false;
         }
     }
@@ -883,7 +883,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             return searchResponse.getHits().getTotalHits() > 0;
 
         } catch (Exception e) {
-            log.error("Error checking community existence in Elasticsearch: {}", e.getMessage(), e);
+            log.error("Error checking community existence in Elasticsearch: {}", e);
             return false;
         }
     }
@@ -911,7 +911,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             // Check if any documents match the query
             return searchResponse.getHits().getTotalHits() > 0;
         } catch (Exception e) {
-            log.error("Error checking community existence in Elasticsearch: {}", e.getMessage(), e);
+            log.error("Error checking community existence in Elasticsearch: {}", e);
             return false;
         }
     }
@@ -942,7 +942,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             // Check if any documents match the query
             return searchResponse.getHits().getTotalHits() > 0;
         } catch (Exception e) {
-            log.error("Error checking community existence in Elasticsearch: {}", e.getMessage(), e);
+            log.error("Error checking community existence in Elasticsearch: {}", e);
             return false;
         }
     }

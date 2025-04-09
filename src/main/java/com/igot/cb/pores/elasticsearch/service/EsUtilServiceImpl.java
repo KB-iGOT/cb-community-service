@@ -830,14 +830,13 @@ public class EsUtilServiceImpl implements EsUtilService {
     }
 
     @Override
-    public Boolean doesCommunityExist(String orgId, String communityName, long topicId) {
-        logger.info("EsUtilService::updateUserIndex:inside method");
+    public Boolean doesCommunityExist(String orgId, String communityName) {
+        logger.info("EsUtilService::doesCommunityExist:inside method");
         try {
             // Build the exact match query
             BoolQueryBuilder query = QueryBuilders.boolQuery()
                 .must(QueryBuilders.termQuery(Constants.ORG_ID+Constants.KEYWORD, orgId))
-                .must(QueryBuilders.termQuery(Constants.COMMUNITY_NAME+Constants.KEYWORD, communityName))
-                .must(QueryBuilders.termQuery(Constants.TOPIC_ID, topicId));
+                .must(QueryBuilders.termQuery(Constants.COMMUNITY_NAME+Constants.KEYWORD, communityName));
 
             // Create the search request
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
@@ -853,21 +852,20 @@ public class EsUtilServiceImpl implements EsUtilService {
             // Check if any documents match the query
             return searchResponse.getHits().getTotalHits() > 0;
         } catch (Exception e) {
-            log.error("Error checking community existence in Elasticsearch: {}", e.getMessage(), e);
+            log.error("Error checking community existence in Elasticsearch: {}", e);
             return false;
         }
     }
 
     @Override
-    public boolean isDuplicateCommunity(String orgId, String communityName, long topicId,
+    public boolean isDuplicateCommunity(String orgId, String communityName,
         String excludeCommunityId) {
         logger.info("EsUtilService::isDuplicateCommunity: inside method");
 
         try {
             BoolQueryBuilder query = QueryBuilders.boolQuery()
                 .must(QueryBuilders.termQuery(Constants.ORG_ID + ".keyword", orgId))
-                .must(QueryBuilders.termQuery(Constants.COMMUNITY_NAME + ".keyword", communityName))
-                .must(QueryBuilders.termQuery(Constants.TOPIC_ID, topicId));
+                .must(QueryBuilders.termQuery(Constants.COMMUNITY_NAME + ".keyword", communityName));
 
             if (excludeCommunityId != null && !excludeCommunityId.isEmpty()) {
                 query.mustNot(QueryBuilders.termQuery("_id", excludeCommunityId));
@@ -885,7 +883,66 @@ public class EsUtilServiceImpl implements EsUtilService {
             return searchResponse.getHits().getTotalHits() > 0;
 
         } catch (Exception e) {
-            log.error("Error checking community existence in Elasticsearch: {}", e.getMessage(), e);
+            log.error("Error checking community existence in Elasticsearch: {}", e);
+            return false;
+        }
+    }
+
+
+    @Override
+    public Boolean doesCommunityNameExist(String communityName) {
+        logger.info("EsUtilService::doesCommunityNameExist:inside method");
+        try {
+            // Build the exact match query
+            BoolQueryBuilder query = QueryBuilders.boolQuery()
+                .must(QueryBuilders.termQuery(Constants.COMMUNITY_NAME+Constants.KEYWORD, communityName));
+
+            // Create the search request
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+            sourceBuilder.query(query);
+            sourceBuilder.size(0); // We are only interested in the existence
+
+            SearchRequest searchRequest = new SearchRequest(communityIndex);
+            searchRequest.source(sourceBuilder);
+
+            // Execute the search
+            SearchResponse searchResponse = elasticsearchClient.search(searchRequest, RequestOptions.DEFAULT);
+
+            // Check if any documents match the query
+            return searchResponse.getHits().getTotalHits() > 0;
+        } catch (Exception e) {
+            log.error("Error checking community existence in Elasticsearch: {}", e);
+            return false;
+        }
+    }
+
+    @Override
+    public Boolean doesCommunityNameExistForPublish(String communityName, String communityId) {
+        logger.info("EsUtilService::doesCommunityNameExistForPublish:inside method");
+        try {
+            // Build the exact match query with mustNot for excluding communityId
+            BoolQueryBuilder query = QueryBuilders.boolQuery()
+                .must(QueryBuilders.termQuery(Constants.COMMUNITY_NAME + Constants.KEYWORD, communityName));
+
+            if (communityId != null && !communityId.isEmpty()) {
+                query.mustNot(QueryBuilders.termQuery("_id", communityId));
+            }
+
+            // Create the search request
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+            sourceBuilder.query(query);
+            sourceBuilder.size(0); // We are only interested in the existence
+
+            SearchRequest searchRequest = new SearchRequest(communityIndex);
+            searchRequest.source(sourceBuilder);
+
+            // Execute the search
+            SearchResponse searchResponse = elasticsearchClient.search(searchRequest, RequestOptions.DEFAULT);
+
+            // Check if any documents match the query
+            return searchResponse.getHits().getTotalHits() > 0;
+        } catch (Exception e) {
+            log.error("Error checking community existence in Elasticsearch: {}", e);
             return false;
         }
     }

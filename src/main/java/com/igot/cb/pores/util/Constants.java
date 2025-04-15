@@ -242,7 +242,7 @@ public class Constants {
     public static final String MODERATOR_NAME = "moderator_name";
     public static String CommunityCreationAllowed = "isCommunityCreationAllowed";
     public static String CREATE_ERROR_MSG_WITHIN_COMMUNITY = "A community with this name already exists. Please choose a different name to continue.";
-    public static String CREATE_ERROR_MSG_COMMUNITY="A community with this name already exists. Please choose a different name to continue.";
+    public static String CREATE_ERROR_MSG_COMMUNITY="Community name already exists. Do you still want to continue?";
 
     private Constants() {
     }

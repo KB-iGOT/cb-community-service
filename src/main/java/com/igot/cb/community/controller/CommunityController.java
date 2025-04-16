@@ -182,4 +182,10 @@ public class CommunityController {
         ApiResponse response = communityManagementService.read(communityId);
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
+
+    @PostMapping("/user/sync")
+    public ResponseEntity<ApiResponse> searchCommunityFromEs() {
+        ApiResponse response = communityManagementService.syncUserWithCommunity();
+        return new ResponseEntity<>(response, response.getResponseCode());
+    }
 }

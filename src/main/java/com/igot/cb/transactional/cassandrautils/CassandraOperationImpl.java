@@ -12,6 +12,7 @@ import com.datastax.driver.core.querybuilder.Select.Builder;
 import com.datastax.driver.core.querybuilder.Select.Where;
 import com.datastax.driver.core.querybuilder.Update;
 import com.datastax.driver.core.querybuilder.Update.Assignments;
+import com.datastax.oss.driver.api.core.cql.Row;
 import com.igot.cb.pores.util.ApiResponse;
 import com.igot.cb.pores.util.Constants;
 import org.apache.commons.collections.CollectionUtils;
@@ -213,5 +214,20 @@ public class CassandraOperationImpl implements CassandraOperation {
                 "Cassandra operation {0} started at {1} and completed at {2}. Total time elapsed is {3}.";
         MessageFormat mf = new MessageFormat(message);
         logger.debug(mf.format(new Object[] {operation, startTime, stopTime, elapsedTime}));
+    }
+
+    public List<Map<String, Object>> fetchAllRecords(String keyspaceName, String tableName) {
+        String query = String.format("SELECT * FROM %s.%s", keyspaceName, tableName);
+        ResultSet resultSet = connectionManager.getSession(keyspaceName).execute(query);
+
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (com.datastax.driver.core.Row row : resultSet) {
+            Map<String, Object> record = new HashMap<>();
+            row.getColumnDefinitions().asList().forEach(column -> {
+                record.put(column.getName(), row.getObject(column.getName()));
+            });
+            records.add(record);
+        }
+        return records;
     }
 }

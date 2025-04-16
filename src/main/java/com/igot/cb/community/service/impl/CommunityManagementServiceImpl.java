@@ -124,7 +124,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
     @Autowired
     private NotificationService notificationService;
 
-    @PostConstruct
+//    @PostConstruct
     public void init() {
         if (storageService == null) {
             storageService = StorageServiceFactory.getStorageService(new StorageConfig(cbServerProperties.getCloudStorageTypeName(), cbServerProperties.getCloudStorageKey(), cbServerProperties.getCloudStorageSecret().replace("\\n", "\n"), Option.apply(cbServerProperties.getCloudStorageEndpoint()), Option.empty()));
@@ -1933,6 +1933,47 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             throw new CustomException(Constants.ERROR, "error while processing",
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    @Override
+    public ApiResponse syncUserWithCommunity() {
+        log.info("CommunityEngagementService:syncUserWithCommunity::inside method");
+        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_SEARCH);
+        try {
+            String keyspaceName = Constants.KEYSPACE_SUNBIRD;
+            String tableName = Constants.USER_COMMUNITY_TABLE;
+
+            // Fetch all records from the table
+            List<Map<String, Object>> records = cassandraOperation.fetchAllRecords(keyspaceName, tableName);
+
+            if (records.isEmpty()) {
+                log.info("No records found in the table: {}.{}", keyspaceName, tableName);
+            } else {
+                // Process the fetched records
+                for (Map<String, Object> record : records) {
+                    // Add your processing logic here
+                    // Check if the record contains the key 'status' and if its value is true
+                    if (record.containsKey("status") && Boolean.TRUE.equals(record.get("status"))) {
+                        String userId = (String) record.get(Constants.USER_ID_LOWER_CASE); // Fetch userId from the record
+                        String communityId = (String) record.get(Constants.COMMUNITY_ID_LOWERCASE); // Fetch communityId from the record
+                        esUtilService.updateUserIndex(userId, communityId, true);
+                        // Add your processing logic here
+                    } else {
+                        log.info("Skipping record: {}", record);
+                    }
+                }
+            }
+
+            response.getParams().setStatus(Constants.SUCCESS);
+            response.getParams().setErrMsg("User sync completed successfully.");
+            response.setResponseCode(HttpStatus.OK);
+
+        } catch (Exception e) {
+            logger.error("Error occurred while syncing users with community:", e);
+            throw new CustomException(Constants.ERROR, "error while processing",
+                HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        return response;
     }
 
     private ApiResponse searchCommunityFromEs(SearchCriteria searchCriteria, ApiResponse response,

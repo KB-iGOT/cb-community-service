@@ -42,4 +42,6 @@ public interface CassandraOperation {
         Map<String, Object> compositeKey
     );
 
+    public List<Map<String, Object>> fetchAllRecords(String keyspaceName, String tableName);
+
 }

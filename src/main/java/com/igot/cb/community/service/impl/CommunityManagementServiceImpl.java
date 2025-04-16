@@ -181,7 +181,8 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             if (esUtilService.doesCommunityExist(userRootOrgId,
                 communityDetails.get(Constants.COMMUNITY_NAME).asText())) {
                 response.getParams().setStatus(Constants.FAILED);
-                response.getParams().setErrMsg("Community with the given orgId and communityName already exists in this topic. or its in blocked state.");
+                response.getParams()
+                    .setErrMsg(Constants.CREATE_ERROR_MSG_WITHIN_COMMUNITY);
                 response.setResponseCode(HttpStatus.CONFLICT);
                 return response;
             }
@@ -193,7 +194,8 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             if (!isCommunityCreationAllowed) {
                 if (esUtilService.doesCommunityNameExist(communityDetails.get(Constants.COMMUNITY_NAME).asText())) {
                     response.getParams().setStatus(Constants.FAILED);
-                    response.getParams().setErrMsg("Community with the given communityName already present in another organisation");
+                    response.getParams().setErrMsg(
+                        Constants.CREATE_ERROR_MSG_COMMUNITY);
                     response.setResponseCode(HttpStatus.PRECONDITION_FAILED);
                     return response;
                 }
@@ -454,7 +456,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 if (esUtilService.isDuplicateCommunity(dataNode.get(Constants.ORG_ID).asText(),
                     dataNode.get(Constants.COMMUNITY_NAME).asText(), dataNode.get(Constants.COMMUNITY_ID).asText())) {
                     response.getParams().setStatus(Constants.FAILED);
-                    response.getParams().setErrMsg("Community with the given orgId and communityName already exists in this topic, or it's in blocked state.");
+                    response.getParams().setErrMsg(Constants.CREATE_ERROR_MSG_WITHIN_COMMUNITY);
                     response.setResponseCode(HttpStatus.CONFLICT);
                     return response;
                 }
@@ -470,7 +472,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                         dataNode.get(Constants.COMMUNITY_ID).asText())) {
                         response.getParams().setStatus(Constants.FAILED);
                         response.getParams().setErrMsg(
-                            "Community with the given communityName already present in another organisation");
+                            Constants.CREATE_ERROR_MSG_COMMUNITY);
                         response.setResponseCode(HttpStatus.PRECONDITION_FAILED);
                         return response;
                     }
@@ -1831,7 +1833,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             if (esUtilService.isDuplicateCommunity(communityDetails.get(Constants.ORG_ID).asText(),
                 communityDetails.get(Constants.COMMUNITY_NAME).asText(), communityDetails.get(Constants.COMMUNITY_ID).asText())) {
                 response.getParams().setStatus(Constants.FAILED);
-                response.getParams().setErrMsg("Community with the given orgId and communityName already exists in this topic, or it's in blocked state.");
+                response.getParams().setErrMsg(Constants.CREATE_ERROR_MSG_WITHIN_COMMUNITY);
                 response.setResponseCode(HttpStatus.CONFLICT);
                 return response;
             }
@@ -1847,7 +1849,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     communityDetails.get(Constants.COMMUNITY_ID).asText())) {
                     response.getParams().setStatus(Constants.FAILED);
                     response.getParams().setErrMsg(
-                        "Community with the given communityName already present in another organisation");
+                        Constants.CREATE_ERROR_MSG_COMMUNITY);
                     response.setResponseCode(HttpStatus.PRECONDITION_FAILED);
                     return response;
                 }
@@ -2185,6 +2187,49 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             str.append("Failed Due To Missing Params - ").append(errList).append(".");
         }
         return str.toString();
+    }
+
+    @Override
+    public ApiResponse read(String communityId) {
+        log.info("CommunityEngagementService:read:reading community");
+        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_ORG_BOOKMARK_READ);
+        if (StringUtils.isEmpty(communityId)) {
+            logger.error("Community Id not found");
+            response.setResponseCode(HttpStatus.INTERNAL_SERVER_ERROR);
+            response.getParams().setErrMsg(Constants.ID_NOT_FOUND);
+            return response;
+        }
+        try {
+            String cachedJson = cacheService.getCache(communityId);
+            if (StringUtils.isNotEmpty(cachedJson)) {
+                log.info("Record coming from redis cache");
+                response.getParams().setErrMsg(Constants.SUCCESSFULLY_READING);
+                response
+                        .getResult()
+                        .put(Constants.COMMUNITY_DETAILS, objectMapper.readValue(cachedJson, new TypeReference<Object>() {
+                        }));
+            } else {
+                Optional<CommunityEntity> communityEntityOptional = communityEngagementRepository.findByCommunityIdAndIsActive(communityId, true);
+                if (communityEntityOptional.isPresent()) {
+                    CommunityEntity communityEntity = communityEntityOptional.get();
+                    cacheService.putCache(communityEntity.getCommunityId(),
+                            communityEntityOptional.get().getData());
+                    log.info("Record coming from postgres db");
+                    response.getParams().setErrMsg(Constants.SUCCESSFULLY_READING);
+                    response.getResult().put(Constants.COMMUNITY_DETAILS, objectMapper.convertValue(communityEntity.getData(), new TypeReference<Object>() {
+                    }));
+                } else {
+                    logger.error("Invalid Id: {}", communityId);
+                    response.setResponseCode(HttpStatus.NOT_FOUND);
+                    response.getParams().setErrMsg(Constants.INVALID_COMMUNITY_ID);
+                }
+            }
+
+        } catch (Exception e) {
+            logger.error("Error while mapping JSON for id {}: {}", communityId, e.getMessage(), e);
+            throw new CustomException(Constants.ERROR, "error while processing", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        return response;
     }
 
 }

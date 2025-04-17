@@ -59,5 +59,5 @@ public interface CommunityManagementService {
 
     ApiResponse read(String communityId);
 
-    ApiResponse syncUserWithCommunity();
+    ApiResponse syncUserWithCommunity(MultipartFile file);
 }

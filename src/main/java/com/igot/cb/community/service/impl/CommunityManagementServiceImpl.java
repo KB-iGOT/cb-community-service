@@ -1963,8 +1963,8 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 for (Map<String, Object> record : records) {
                     // Add your processing logic here
                     // Check if the record contains the key 'status' and if its value is true
-                    if (record.containsKey("status") && Constants.TRUE.equals(
-                        record.get("status"))) {
+                    if (record.containsKey("status") && Constants.TRUE.equalsIgnoreCase(
+                        (String) record.get("status"))) {
                         String userId = (String) record.get(
                             Constants.USER_ID_LOWER_CASE); // Fetch userId from the record
                         String communityId = (String) record.get(

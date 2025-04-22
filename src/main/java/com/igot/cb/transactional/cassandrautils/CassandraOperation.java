@@ -42,5 +42,4 @@ public interface CassandraOperation {
         Map<String, Object> compositeKey
     );
 
-
 }

@@ -12,7 +12,6 @@ import com.datastax.driver.core.querybuilder.Select.Builder;
 import com.datastax.driver.core.querybuilder.Select.Where;
 import com.datastax.driver.core.querybuilder.Update;
 import com.datastax.driver.core.querybuilder.Update.Assignments;
-import com.datastax.oss.driver.api.core.cql.Row;
 import com.igot.cb.pores.util.ApiResponse;
 import com.igot.cb.pores.util.Constants;
 import org.apache.commons.collections.CollectionUtils;
@@ -215,5 +214,4 @@ public class CassandraOperationImpl implements CassandraOperation {
         MessageFormat mf = new MessageFormat(message);
         logger.debug(mf.format(new Object[] {operation, startTime, stopTime, elapsedTime}));
     }
-
 }

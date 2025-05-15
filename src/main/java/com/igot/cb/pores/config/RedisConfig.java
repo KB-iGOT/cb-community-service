@@ -1,10 +1,15 @@
 package com.igot.cb.pores.config;
 
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import redis.clients.jedis.JedisPool;
@@ -28,20 +33,18 @@ public class RedisConfig {
   @Value("${spring.redis.data.port}")
   private int redisDataPort;
 
-  @Bean
-  public JedisPool jedisPool() {
-    JedisPoolConfig poolConfig = new JedisPoolConfig();
-    poolConfig.setMaxIdle(128);
-    poolConfig.setMaxTotal(3000);
-    poolConfig.setMinIdle(100);
-    poolConfig.setTestOnBorrow(true);
-    poolConfig.setTestOnReturn(true);
-    poolConfig.setTestWhileIdle(true);
-    poolConfig.setMinEvictableIdleTime(Duration.ofMillis(120000));
-    poolConfig.setTimeBetweenEvictionRuns(Duration.ofMillis(30000));
-    poolConfig.setNumTestsPerEvictionRun(3);
-    poolConfig.setBlockWhenExhausted(true);
-    return  new JedisPool(poolConfig, redisHost, redisPort);
+  private final long redisTimeout = 60000;
+
+  public RedisConnectionFactory redisConnectionFactory() {
+    RedisStandaloneConfiguration configuration = new RedisStandaloneConfiguration();
+    configuration.setHostName(redisHost);
+    configuration.setPort(redisPort);
+    configuration.setDatabase(0);
+    LettuceClientConfiguration clientConfig = LettucePoolingClientConfiguration.builder()
+        .commandTimeout(Duration.ofMillis(redisTimeout))
+        .poolConfig(buildPoolConfig())
+        .build();
+    return new LettuceConnectionFactory(configuration, clientConfig);
   }
 
   @Bean
@@ -52,26 +55,12 @@ public class RedisConfig {
     redisTemplate.setValueSerializer(new StringRedisSerializer()); // Configure as needed for Object
     return redisTemplate;
   }
-  @Bean
-  public JedisPool jedisDataPopulationPool() {
-    final JedisPoolConfig poolConfig = buildPoolConfig();
-    JedisPool jedisPool = new JedisPool(poolConfig, redisDataHost,
-        redisDataPort);
-    return jedisPool;
-  }
 
-  private JedisPoolConfig buildPoolConfig() {
-    final JedisPoolConfig poolConfig = new JedisPoolConfig();
-    poolConfig.setMaxIdle(128);
+  private GenericObjectPoolConfig<?> buildPoolConfig() {
+    GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
     poolConfig.setMaxTotal(3000);
-    poolConfig.setMinIdle(100);
-    poolConfig.setTestOnBorrow(true);
-    poolConfig.setTestOnReturn(true);
-    poolConfig.setTestWhileIdle(true);
-    poolConfig.setMinEvictableIdleTimeMillis(120000);
-    poolConfig.setTimeBetweenEvictionRunsMillis(30000);
-    poolConfig.setNumTestsPerEvictionRun(3);
-    poolConfig.setBlockWhenExhausted(true);
+    poolConfig.setMaxIdle(128);
+    poolConfig.setMaxWait(Duration.ofMillis(5000));
     return poolConfig;
   }
 

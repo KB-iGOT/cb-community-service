@@ -1,5 +1,25 @@
 package com.igot.cb.pores.elasticsearch.service;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.elasticsearch._types.Refresh;
+import co.elastic.clients.elasticsearch._types.SortOptions;
+import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
+import co.elastic.clients.elasticsearch._types.aggregations.TermsAggregation;
+import co.elastic.clients.elasticsearch._types.query_dsl.*;
+import co.elastic.clients.elasticsearch.core.*;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.core.search.HitsMetadata;
+import co.elastic.clients.elasticsearch.core.search.SourceConfig;
+import co.elastic.clients.elasticsearch.indices.GetIndexRequest;
+import co.elastic.clients.elasticsearch.indices.GetIndexResponse;
+import co.elastic.clients.elasticsearch.indices.RefreshRequest;
+import co.elastic.clients.json.JsonData;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,21 +34,7 @@ import com.networknt.schema.JsonSchemaFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.action.delete.DeleteRequest;
-import org.elasticsearch.action.delete.DeleteResponse;
-import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.index.IndexResponse;
-import org.elasticsearch.action.search.ClearScrollRequest;
-import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.action.search.SearchScrollRequest;
-import org.elasticsearch.action.support.WriteRequest;
-import org.elasticsearch.action.update.UpdateRequest;
-import org.elasticsearch.action.update.UpdateResponse;
+
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.indices.GetIndexRequest;
@@ -71,8 +77,8 @@ public class EsUtilServiceImpl implements EsUtilService {
     /*@Autowired
     private RestHighLevelClient elasticsearchClient;*/
     private final EsConfig esConfig;
-    private final RestHighLevelClient elasticsearchClient;
-    private  final RestHighLevelClient sbESClient;
+    private final ElasticsearchClient elasticsearchClient;
+    private  final ElasticsearchClient sbESClient;
     private final Logger logger = LogManager.getLogger(getClass());
 
 
@@ -83,8 +89,8 @@ public class EsUtilServiceImpl implements EsUtilService {
     private CbServerProperties cbServerProperties;
 
     @Autowired
-    public EsUtilServiceImpl(@Qualifier("elasticsearchClient") RestHighLevelClient elasticsearchClient, EsConfig esConnection,
-        @Qualifier("sbESClient") RestHighLevelClient sbESClient) {
+    public EsUtilServiceImpl(@Qualifier("elasticsearchClient") ElasticsearchClient elasticsearchClient, EsConfig esConnection,
+        @Qualifier("sbESClient") ElasticsearchClient sbESClient) {
         this.elasticsearchClient = elasticsearchClient;
         this.esConfig = esConnection;
       this.sbESClient = sbESClient;
@@ -98,15 +104,15 @@ public class EsUtilServiceImpl implements EsUtilService {
 
 
     @Override
-    public RestStatus addDocument(
+    public String addDocument(
             String esIndexName, String type, String id, Map<String, Object> document, String JsonFilePath) {
         logger.info("EsUtilServiceImpl :: addDocument");
         try {
             JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance();
             InputStream schemaStream = schemaFactory.getClass().getResourceAsStream(JsonFilePath);
             Map<String, Object> map = objectMapper.readValue(schemaStream,
-                    new TypeReference<Map<String, Object>>() {
-                    });
+                new TypeReference<Map<String, Object>>() {
+                });
             Iterator<Entry<String, Object>> iterator = document.entrySet().iterator();
             while (iterator.hasNext()) {
                 Entry<String, Object> entry = iterator.next();
@@ -115,11 +121,14 @@ public class EsUtilServiceImpl implements EsUtilService {
                     iterator.remove();
                 }
             }
-            IndexRequest indexRequest =
-                    new IndexRequest(esIndexName, type, id).source(document, XContentType.JSON).setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            IndexResponse response = elasticsearchClient.index(indexRequest, RequestOptions.DEFAULT);
-            logger.info("EsUtilServiceImpl :: addDocument :Insertion response {}", response.status());
-            return response.status();
+            IndexRequest<Map<String,Object>> indexRequest = new IndexRequest.Builder<Map<String, Object>>()
+                .index(esIndexName)
+                .id(id)
+                .document(document)
+                .refresh(Refresh.True)
+                .build();
+            IndexResponse response = elasticsearchClient.index(indexRequest);
+            return "Successfully indexed document with id: " + response.result();
         } catch (Exception e) {
             logger.error("Issue while Indexing to es: {}", e.getMessage());
             return null;
@@ -127,7 +136,7 @@ public class EsUtilServiceImpl implements EsUtilService {
     }
 
     @Override
-    public RestStatus updateDocument(
+    public String updateDocument(
             String index, String indexType, String entityId, Map<String, Object> updatedDocument, String JsonFilePath) {
         try {
             JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance();
@@ -143,11 +152,14 @@ public class EsUtilServiceImpl implements EsUtilService {
                     iterator.remove();
                 }
             }
-            IndexRequest indexRequest = new IndexRequest(index, indexType, entityId)
-                .source(updatedDocument)
-                .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            IndexResponse response = elasticsearchClient.index(indexRequest, RequestOptions.DEFAULT);
-            return response.status();
+            IndexRequest<Map<String, Object>> indexRequest = new IndexRequest.Builder<Map<String, Object>>()
+                .index(index)
+                .id(entityId)
+                .document(updatedDocument)
+                .refresh(Refresh.True)
+                .build();
+            IndexResponse response = elasticsearchClient.index(indexRequest);
+            return response.result().jsonValue();
         } catch (IOException e) {
             return null;
         }
@@ -156,10 +168,13 @@ public class EsUtilServiceImpl implements EsUtilService {
     @Override
     public void deleteDocument(String documentId, String esIndexName) {
         try {
-            DeleteRequest request = new DeleteRequest(esIndexName, Constants.INDEX_TYPE, documentId);
-            DeleteResponse response = elasticsearchClient.delete(request, RequestOptions.DEFAULT);
-            if (response.getResult() == DocWriteResponse.Result.DELETED) {
-                logger.info("Document deleted successfully from elasticsearch.");
+            DeleteRequest request = new DeleteRequest.Builder().index(esIndexName).id(documentId).build();
+            DeleteResponse response = elasticsearchClient.delete(request);
+            if (response.result().jsonValue().equalsIgnoreCase("DELETED")) {
+                log.info("Document deleted successfully from elasticsearch.");
+                RefreshRequest refreshRequest = new RefreshRequest.Builder().index(esIndexName).build();
+                elasticsearchClient.indices().refresh(refreshRequest);
+                log.info("Index refreshed to reflect the document deletion.");
             } else {
                 logger.error("Document not found or failed to delete from elasticsearch.");
             }
@@ -174,32 +189,31 @@ public class EsUtilServiceImpl implements EsUtilService {
         if (searchString != null && searchString.length() > cbServerProperties.getSearchStringMaxRegexLength()) {
             throw new RuntimeException("The length of the search string exceeds the allowed maximum of " + cbServerProperties.getSearchStringMaxRegexLength() + " characters.");
         }
+        SearchRequest.Builder searchRequestBuilder = buildSearchRequest(searchCriteria);
+        searchRequestBuilder.index(esIndexName);
+        assert searchRequestBuilder != null;
         try {
             SearchResult searchResult = new SearchResult();
-            boolean indexExists = elasticsearchClient.indices().exists(new GetIndexRequest(esIndexName), RequestOptions.DEFAULT);
-            if (!indexExists) {
-                return searchResult;
-            }
-            SearchSourceBuilder searchSourceBuilder = buildSearchSourceBuilder(searchCriteria);
-            SearchRequest searchRequest = new SearchRequest(esIndexName);
-            searchRequest.source(searchSourceBuilder);
-            if (searchSourceBuilder != null) {
+
+            if (searchCriteria != null) {
                 int pageNumber = searchCriteria.getPageNumber();
                 int pageSize = searchCriteria.getPageSize();
                 int from = pageNumber * pageSize;
-                searchSourceBuilder.from(from);
-                if (pageSize != 0) {
-                    searchSourceBuilder.size(pageSize);
+                searchRequestBuilder.from(from);
+                if (pageSize > 0) {
+                    searchRequestBuilder.size(pageSize);
                 }
             }
-            SearchResponse paginatedSearchResponse =
-                    elasticsearchClient.search(searchRequest, RequestOptions.DEFAULT);
+            SearchRequest searchRequest = searchRequestBuilder.build();
+            log.info("Final search query: {}", searchRequest.toString());
+            SearchResponse<Object> paginatedSearchResponse =
+                elasticsearchClient.search(searchRequest, Object.class);
             List<Map<String, Object>> paginatedResult = extractPaginatedResult(paginatedSearchResponse);
             Map<String, List<FacetDTO>> fieldAggregations =
                     extractFacetData(paginatedSearchResponse, searchCriteria);
             searchResult.setData(objectMapper.valueToTree(paginatedResult));
             searchResult.setFacets(fieldAggregations);
-            searchResult.setTotalCount(paginatedSearchResponse.getHits().getTotalHits());
+            searchResult.setTotalCount(paginatedSearchResponse.hits().total().value());
             return searchResult;
         } catch (IOException e) {
             logger.error("Error while fetching details from elastic search");
@@ -207,53 +221,78 @@ public class EsUtilServiceImpl implements EsUtilService {
         }
     }
 
+    private SearchRequest.Builder buildSearchRequest(SearchCriteria searchCriteria) {
+        log.info("Building search query");
+        if (searchCriteria == null || searchCriteria.toString().isEmpty()) {
+            log.error("Search criteria body is missing");
+            return null;
+        }
+        BoolQuery.Builder boolQueryBuilder = buildFilterQuery(searchCriteria.getFilterCriteriaMap());
+        SearchRequest.Builder searchSourceBuilder = new SearchRequest.Builder();
+        searchSourceBuilder.query(boolQueryBuilder.build()._toQuery());
+        addSortToSearchSourceBuilder(searchCriteria, searchSourceBuilder);
+        addRequestedFieldsToSearchSourceBuilder(searchCriteria, searchSourceBuilder);
+        // addQueryStringToFilter(searchCriteria.getSearchString(), boolQueryBuilder);
+        String searchString = searchCriteria.getSearchString();
+        if (isNotBlank(searchString)) {
+            boolQueryBuilder.must(Query.of(q -> q.matchPhrase(mp -> mp.field(Constants.DESCRIPTION).query(searchString))));
+        }
+        addFacetsToSearchSourceBuilder(searchCriteria.getFacets(), searchSourceBuilder);
+        Query queryPart = buildQueryPart(searchCriteria.getQuery());
+        boolQueryBuilder.must(queryPart);
+        log.info("final search query result {}", searchSourceBuilder);
+        return searchSourceBuilder;
+    }
+
     private Map<String, List<FacetDTO>> extractFacetData(
-            SearchResponse searchResponse, SearchCriteria searchCriteria) {
+        SearchResponse<Object> searchResponse, SearchCriteria searchCriteria) {
         Map<String, List<FacetDTO>> fieldAggregations = new HashMap<>();
         if (searchCriteria.getFacets() != null) {
             for (String field : searchCriteria.getFacets()) {
-                Terms fieldAggregation = searchResponse.getAggregations().get(field + "_agg");
-                List<FacetDTO> fieldValueList = new ArrayList<>();
-                for (Terms.Bucket bucket : fieldAggregation.getBuckets()) {
-                    if (!bucket.getKeyAsString().isEmpty()) {
-                        FacetDTO facetDTO = new FacetDTO(bucket.getKeyAsString(), bucket.getDocCount());
-                        fieldValueList.add(facetDTO);
+                Aggregate aggregate = searchResponse
+                    .aggregations()
+                    .get(field + "_agg");
+                if (aggregate.isSterms()) {
+                    List<FacetDTO> fieldValueList = new ArrayList<>();
+                    for (StringTermsBucket bucket : aggregate.sterms().buckets().array()) {
+                        if (!bucket.key().stringValue().isEmpty()) {
+                            FacetDTO facetDTO = new FacetDTO(bucket.key().stringValue(),
+                                bucket.docCount());
+                            fieldValueList.add(facetDTO);
+                        }
                     }
+                    fieldAggregations.put(field, fieldValueList);
                 }
-                fieldAggregations.put(field, fieldValueList);
             }
         }
         return fieldAggregations;
     }
 
     private Map<String, List<FacetDTO>> extractFacetDataForList(
-        SearchResponse searchResponse, SearchCriteria searchCriteria) {
+        SearchResponse<Object> searchResponse, SearchCriteria searchCriteria) {
         Map<String, List<FacetDTO>> fieldAggregations = new HashMap<>();
         if (searchCriteria.getFacets() != null) {
             for (String field : searchCriteria.getFacets()) {
-                // Extract aggregation using the field name
-                Aggregation aggregation = searchResponse.getAggregations().get("topicId");
+                Aggregate aggregate = searchResponse
+                    .aggregations()
+                    .get(field + "_agg");
 
-                // Ensure the aggregation exists and is of type Terms
-                if (aggregation instanceof Terms) {
-                    Terms fieldAggregation = (Terms) aggregation;
+                if (aggregate.isSterms()) {
                     List<FacetDTO> fieldValueList = new ArrayList<>();
-
-                    for (Terms.Bucket bucket : fieldAggregation.getBuckets()) {
-                        String key = bucket.getKeyAsString();
-                        long docCount = bucket.getDocCount();
+                    for (StringTermsBucket bucket : aggregate.sterms().buckets().array()) {
+                        String key = bucket.key().stringValue();
+                        long docCount = bucket.docCount();
 
                         // Check for nested top hits aggregation
-                        Aggregation topHitsAgg = bucket.getAggregations().get("top_hits#topNames");
+                        Aggregate topHitsAgg = bucket.aggregations().get("top_hits#topNames");
                         List<String> topNames = new ArrayList<>();
 
-                        if (topHitsAgg instanceof TopHits) {
-                            TopHits topHits = (TopHits) topHitsAgg;
-                            SearchHits hits = topHits.getHits();
-
-                            for (SearchHit hit : hits.getHits()) {
-                                Map<String, Object> source = hit.getSourceAsMap();
-                                topNames.add((String) source.get(Constants.TOPIC_ID));
+                        if (topHitsAgg != null && topHitsAgg.isTopHits()) {
+                            for (Hit<Object> hit : topHitsAgg.topHits().hits().hits()) {
+                                Map<String, Object> source = hit.source();
+                                if (source != null && source.containsKey(Constants.TOPIC_ID)) {
+                                    topNames.add((String) source.get(Constants.TOPIC_ID));
+                                }
                             }
                         }
 
@@ -391,17 +430,31 @@ public class EsUtilServiceImpl implements EsUtilService {
     }
 
     private void addSortToSearchSourceBuilder(
-            SearchCriteria searchCriteria, SearchSourceBuilder searchSourceBuilder) {
+            SearchCriteria searchCriteria, SearchRequest.Builder searchRequestBuilder) {
         if (isNotBlank(searchCriteria.getOrderBy()) && isNotBlank(searchCriteria.getOrderDirection())) {
             SortOrder sortOrder =
-                    Constants.ASC.equals(searchCriteria.getOrderDirection()) ? SortOrder.ASC : SortOrder.DESC;
+                Constants.ASC.equals(searchCriteria.getOrderDirection()) ? SortOrder.Asc : SortOrder.Desc;
+            searchRequestBuilder.sort(SortOptions.of(so -> so
+                .field(f -> f
+                    .field(searchCriteria.getOrderBy() + Constants.KEYWORD)
+                    .order(sortOrder)
+                )
+            ));
             if (searchCriteria.getOrderBy().equalsIgnoreCase(Constants.COUNT_OF_PEOPLE_JOINED)) {
-                searchSourceBuilder.sort(
-                    SortBuilders.fieldSort(searchCriteria.getOrderBy()).order(sortOrder).unmappedType("long"));
-            } else {
+                searchRequestBuilder.sort(SortOptions.of(so -> so
+                    .field(f -> f
+                        .field(searchCriteria.getOrderBy()) // Use the field directly for long type
+                        .order(sortOrder)
+                    )
+                ));
+            }  else {
                 // Handle other types (like String or others)
-                searchSourceBuilder.sort(
-                    SortBuilders.fieldSort(searchCriteria.getOrderBy() + Constants.KEYWORD).order(sortOrder));
+                searchRequestBuilder.sort(SortOptions.of(so -> so
+                    .field(f -> f
+                        .field(searchCriteria.getOrderBy() + Constants.KEYWORD)
+                        .order(sortOrder)
+                    )
+                ));
             }
         }
     }

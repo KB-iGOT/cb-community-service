@@ -22,19 +22,14 @@ public interface EsUtilService {
 
   void deleteDocument(String documentId, String esIndexName);
 
-  void deleteDocumentsByCriteria(String esIndexName, Query query);
 
   SearchResult searchDocuments(String esIndexName, SearchCriteria searchCriteria) throws Exception;
 
-  public boolean isIndexPresent(String indexName);
 
-  public BulkResponse saveAll(String esIndexName, String type, List<JsonNode> entities) throws IOException;
-
-  List<Map<String, Object>> matchAll(String esIndexName , List<Integer> parentIds) throws IOException;
+  public BulkResponse saveAll(String esIndexName, List<JsonNode> entities) throws IOException;
 
   SearchResult fetchTopCommunitiesForTopics(List<Integer> topicIds, String indexName) throws IOException;
 
-  SearchResult searchDocumentsByField(String indexName, String field, int size, String order);
 
   SearchResponse popularCommunities(SearchRequest searchRequest, RequestOptions aDefault);
 

@@ -52,6 +52,7 @@ import org.elasticsearch.search.sort.SortOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -96,6 +97,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
     CassandraOperation cassandraOperation;
 
     @Autowired
+    @Qualifier(Constants.SEARCH_RESULT_REDIS_TEMPLATE)
     private RedisTemplate<String, SearchResult> redisTemplate;
 
     @Autowired
@@ -119,6 +121,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
     private String communityIndex;
 
     @Autowired
+    @Qualifier(Constants.REDIS_OBJECT_TEMPLATE)
     private RedisTemplate<String, Object> objectRedisTemplate;
 
     private BaseStorageService storageService = null;

@@ -443,7 +443,7 @@ public class EsUtilServiceImpl implements EsUtilService {
                 logger.error("Please specify at least one field to include in the results.");
             } else {
                 // Include only the specified fields
-                searchRequestBuilder.source(SourceConfig.of(s -> s.fetch(f -> f.includes(searchCriteria.getRequestedFields()))));
+                searchRequestBuilder.source(SourceConfig.of(s -> s.filter(f -> f.includes(searchCriteria.getRequestedFields()))));
             }
         }
     }

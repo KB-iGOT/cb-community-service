@@ -1,5 +1,7 @@
 package com.igot.cb.pores.config;
 
+
+
 import com.igot.cb.pores.elasticsearch.dto.SearchResult;
 import com.igot.cb.pores.util.Constants;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
@@ -37,6 +39,7 @@ public class RedisConfig {
 
   private final long redisTimeout = 60000;
 
+  @Bean(name = Constants.REDIS_CONNECTION_FACTORY)
   public RedisConnectionFactory redisConnectionFactory() {
     RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
     config.setHostName(redisHost);

@@ -37,6 +37,7 @@ public class RedisConfig {
 
   private final long redisTimeout = 60000;
 
+  @Bean(name = Constants.REDIS_CONNECTION_FACTORY)
   public RedisConnectionFactory redisConnectionFactory() {
     RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
     config.setHostName(redisHost);

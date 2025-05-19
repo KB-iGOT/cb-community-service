@@ -12,6 +12,7 @@ import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
 import co.elastic.clients.elasticsearch._types.aggregations.TermsAggregation;
 import co.elastic.clients.elasticsearch._types.query_dsl.*;
 import co.elastic.clients.elasticsearch.core.*;
+import co.elastic.clients.elasticsearch.core.SearchRequest.Builder;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.core.search.HitsMetadata;
@@ -35,6 +36,7 @@ import com.igot.cb.pores.util.Constants;
 import com.networknt.schema.JsonSchemaFactory;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import co.elastic.clients.elasticsearch._types.Script;
@@ -305,133 +307,171 @@ public class EsUtilServiceImpl implements EsUtilService {
             logger.error("Search criteria body is missing");
             return null;
         }
-        BoolQuery.Builder boolQueryBuilder = buildFilterQuery(searchCriteria.getFilterCriteriaMap());
+        BoolQuery.Builder boolQueryBuilder = buildFilterQuery(
+            searchCriteria.getFilterCriteriaMap());
+        if (boolQueryBuilder == null) {
+            boolQueryBuilder = QueryBuilders.bool(); // Initialize an empty BoolQuery.Builder
+        }
+        // Add query string filter
+        addQueryStringToFilter(searchCriteria.getSearchString(), boolQueryBuilder);
+        // Add additional query parts
+        Query queryPart = buildQueryPart(searchCriteria.getQuery());
+        if (queryPart != null) {
+            boolQueryBuilder.must(queryPart);
+        }
+        // Build the final query
+        Query finalQuery = boolQueryBuilder.build()._toQuery();
+        // Initialize the search request builder
         SearchRequest.Builder searchSourceBuilder = new SearchRequest.Builder();
-        searchSourceBuilder.query(boolQueryBuilder.build()._toQuery());
+        searchSourceBuilder.query(finalQuery);
+        // Add sorting, requested fields, and facets
         addSortToSearchSourceBuilder(searchCriteria, searchSourceBuilder);
         addRequestedFieldsToSearchSourceBuilder(searchCriteria, searchSourceBuilder);
-       // addQueryStringToFilter(searchCriteria.getSearchString(), boolQueryBuilder);
-        String searchString = searchCriteria.getSearchString();
-        if (isNotBlank(searchString)) {
-            Query orgNameWildcardQuery = Query.of(q -> q.wildcard(
-                WildcardQuery.of(w -> w
-                    .field("orgName.keyword")
-                    .value("*" + searchString.toLowerCase() + "*"))
-            ));
-            Query communityNameWildcardQuery = Query.of(q -> q.wildcard(
-                WildcardQuery.of(w -> w
-                    .field("communityName.keyword")
-                    .value("*" + searchString.toLowerCase() + "*"))
-            ));
-            boolQueryBuilder.must(Query.of(q -> q.bool(b -> b
-                .should(orgNameWildcardQuery)
-                .should(communityNameWildcardQuery)
-            )));
-        }
         addFacetsToSearchSourceBuilder(searchCriteria.getFacets(), searchSourceBuilder);
-        Query queryPart = buildQueryPart(searchCriteria.getQuery());
-        boolQueryBuilder.must(queryPart);
-        logger.info("final search query result {}", searchSourceBuilder);
         return searchSourceBuilder;
     }
 
+
+    private void addQueryStringToFilter(String searchString, BoolQuery.Builder boolQueryBuilder) {
+        if (isNotBlank(searchString)) {
+            String wildcardValue = "*" + searchString.toLowerCase() + "*";
+
+            Query communityNameQuery = Query.of(q -> q.wildcard(w -> w
+                .field("communityName.keyword")
+                .value(wildcardValue)
+            ));
+
+            Query orgNameQuery = Query.of(q -> q.wildcard(w -> w
+                .field("orgName.keyword")
+                .value(wildcardValue)
+            ));
+
+            BoolQuery innerBoolQuery = new BoolQuery.Builder()
+                .should(communityNameQuery)
+                .should(orgNameQuery)
+                .minimumShouldMatch("1")
+                .build();
+
+            boolQueryBuilder.must(q -> q.bool(innerBoolQuery));
+        }
+    }
+
+
     private BoolQuery.Builder buildFilterQuery(Map<String, Object> filterCriteriaMap) {
+
+        if (MapUtils.isNotEmpty(filterCriteriaMap)) {
+            log.info("Search:: buildFilterQuery");
+            // Create a BoolQueryBuilder
         BoolQuery.Builder boolQueryBuilder = QueryBuilders.bool();
         List<Query> mustNotQueries = new ArrayList<>();
         List<Query> boolQueries = new ArrayList<>();
-
-        if (filterCriteriaMap != null) {
-            filterCriteriaMap.forEach(
-                (field, value) -> {
-                    if (field.equals("must_not") && value instanceof ArrayList) {
-                        mustNotQueries.add(Query.of(q ->q.termsSet(t->t.field(field).terms((ArrayList<String>) value))));
-                    } else if (value instanceof Boolean) {
-                        boolQueries.add(Query.of(q ->q.term(t->t.field(field).value((boolean)value))));
-                    } else if (value instanceof ArrayList) {
-                        List<FieldValue> termsList = ((ArrayList<String>) value).stream()
-                            .map(FieldValue::of)
-                            .collect(Collectors.toList());
-                        boolQueryBuilder.must(Query.of(q -> q.terms(t -> t.field(field + Constants.KEYWORD).terms(terms -> terms.value(termsList)))));
-                    } else if (value instanceof String) {
-                        boolQueryBuilder.must(Query.of(q -> q.terms(t ->
-                            t.field(field + Constants.KEYWORD)
-                                .terms(terms -> terms.value(List.of(FieldValue.of((String) value))))
-                        )));
-                    } else if (value instanceof Map) {
-                        Map<String, Object> nestedMap = (Map<String, Object>) value;
-                        if (isRangeQuery(nestedMap)) {
-                            // Handle range query
-                            BoolQuery.Builder rangeOrNullQuery = QueryBuilders.bool();
-                            RangeQuery.Builder rangeQuery = QueryBuilders.range().field(field);
-                            nestedMap.forEach((rangeOperator, rangeValue) -> {
-                                switch (rangeOperator) {
-                                    case Constants.SEARCH_OPERATION_GREATER_THAN_EQUALS:
-                                        rangeQuery.gte((JsonData) rangeValue);
-                                        break;
-                                    case Constants.SEARCH_OPERATION_LESS_THAN_EQUALS:
-                                        rangeQuery.lte((JsonData) rangeValue);
-                                        break;
-                                    case Constants.SEARCH_OPERATION_GREATER_THAN:
-                                        rangeQuery.gt((JsonData) rangeValue);
-                                        break;
-                                    case Constants.SEARCH_OPERATION_LESS_THAN:
-                                        rangeQuery.lt((JsonData) rangeValue);
-                                        break;
-                                }
-                            });
-                            rangeOrNullQuery.should(rangeQuery.build()._toQuery());
-                            rangeOrNullQuery.should(Query.of(q -> q.bool(b -> b.mustNot(Query.of(qn -> qn.exists(e -> e.field(field)))))));
-                            boolQueryBuilder.must(rangeOrNullQuery.build()._toQuery());
-                        } else {
-                            nestedMap.forEach((nestedField, nestedValue) -> {
-                                String fullPath = field + "." + nestedField;
-                                if (nestedValue instanceof Boolean) {
-                                    boolQueryBuilder.must(Query.of(q -> q.term(t -> t.field(fullPath).value((Boolean) nestedValue))));
-                                } else if (nestedValue instanceof String) {
-                                    List<FieldValue> termList = Collections.singletonList(FieldValue.of((String) nestedValue));
-                                    boolQueryBuilder.must(Query.of(q -> q.terms(t -> t.field(fullPath + Constants.KEYWORD).terms((TermsQueryField) termList))));
-                                } else if (nestedValue instanceof ArrayList) {
-                                    boolQueryBuilder.must(Query.of(q -> q.terms(t -> t.field(fullPath + Constants.KEYWORD).terms((TermsQueryField) nestedValue))));
-                                }
-                            });
-                        }
+        filterCriteriaMap.forEach(
+            (field, value) -> {
+                if (field.equals("must_not") && value instanceof ArrayList) {
+                    mustNotQueries.add(Query.of(
+                        q -> q.termsSet(t -> t.field(field).terms((ArrayList<String>) value))));
+                } else if (value instanceof Boolean) {
+                    boolQueries.add(
+                        Query.of(q -> q.term(t -> t.field(field).value((boolean) value))));
+                } else if (value instanceof ArrayList) {
+                    List<FieldValue> termsList = ((ArrayList<String>) value).stream()
+                        .map(FieldValue::of)
+                        .collect(Collectors.toList());
+                    boolQueryBuilder.must(Query.of(q -> q.terms(
+                        t -> t.field(field + Constants.KEYWORD)
+                            .terms(terms -> terms.value(termsList)))));
+                } else if (value instanceof String) {
+                    boolQueryBuilder.must(Query.of(q -> q.terms(t ->
+                        t.field(field + Constants.KEYWORD)
+                            .terms(terms -> terms.value(List.of(FieldValue.of((String) value))))
+                    )));
+                } else if (value instanceof Map) {
+                    Map<String, Object> nestedMap = (Map<String, Object>) value;
+                    if (isRangeQuery(nestedMap)) {
+                        // Handle range query
+                        BoolQuery.Builder rangeOrNullQuery = QueryBuilders.bool();
+                        RangeQuery.Builder rangeQuery = QueryBuilders.range().field(field);
+                        nestedMap.forEach((rangeOperator, rangeValue) -> {
+                            switch (rangeOperator) {
+                                case Constants.SEARCH_OPERATION_GREATER_THAN_EQUALS:
+                                    rangeQuery.gte((JsonData) rangeValue);
+                                    break;
+                                case Constants.SEARCH_OPERATION_LESS_THAN_EQUALS:
+                                    rangeQuery.lte((JsonData) rangeValue);
+                                    break;
+                                case Constants.SEARCH_OPERATION_GREATER_THAN:
+                                    rangeQuery.gt((JsonData) rangeValue);
+                                    break;
+                                case Constants.SEARCH_OPERATION_LESS_THAN:
+                                    rangeQuery.lt((JsonData) rangeValue);
+                                    break;
+                            }
+                        });
+                        rangeOrNullQuery.should(rangeQuery.build()._toQuery());
+                        rangeOrNullQuery.should(Query.of(q -> q.bool(
+                            b -> b.mustNot(Query.of(qn -> qn.exists(e -> e.field(field)))))));
+                        boolQueryBuilder.must(rangeOrNullQuery.build()._toQuery());
+                    } else {
+                        nestedMap.forEach((nestedField, nestedValue) -> {
+                            String fullPath = field + "." + nestedField;
+                            if (nestedValue instanceof Boolean) {
+                                boolQueryBuilder.must(Query.of(q -> q.term(
+                                    t -> t.field(fullPath).value((Boolean) nestedValue))));
+                            } else if (nestedValue instanceof String) {
+                                List<FieldValue> termList = Collections.singletonList(
+                                    FieldValue.of((String) nestedValue));
+                                boolQueryBuilder.must(Query.of(q -> q.terms(
+                                    t -> t.field(fullPath + Constants.KEYWORD)
+                                        .terms((TermsQueryField) termList))));
+                            } else if (nestedValue instanceof ArrayList) {
+                                boolQueryBuilder.must(Query.of(q -> q.terms(
+                                    t -> t.field(fullPath + Constants.KEYWORD)
+                                        .terms((TermsQueryField) nestedValue))));
+                            }
+                        });
                     }
-                });
-            mustNotQueries.forEach(mustNotQuery -> boolQueryBuilder.mustNot(mustNotQuery));
-            boolQueries.forEach(boolQuery -> boolQueryBuilder.must(boolQuery));
-        }
+                }
+            });
+        mustNotQueries.forEach(mustNotQuery -> boolQueryBuilder.mustNot(mustNotQuery));
+        boolQueries.forEach(boolQuery -> boolQueryBuilder.must(boolQuery));
         return boolQueryBuilder;
+    } else {
+           return null;
+       }
     }
 
     private void addSortToSearchSourceBuilder(
             SearchCriteria searchCriteria, SearchRequest.Builder searchRequestBuilder) {
-        if (isNotBlank(searchCriteria.getOrderBy()) && isNotBlank(searchCriteria.getOrderDirection())) {
-            SortOrder sortOrder =
-                Constants.ASC.equals(searchCriteria.getOrderDirection()) ? SortOrder.Asc : SortOrder.Desc;
+        if (searchCriteria == null ||
+            !isNotBlank(searchCriteria.getOrderBy()) ||
+            !isNotBlank(searchCriteria.getOrderDirection())) {
+            return; // Nothing to sort, skip
+        }
+        SortOrder sortOrder =
+            Constants.ASC.equalsIgnoreCase(searchCriteria.getOrderDirection()) ? SortOrder.Asc : SortOrder.Desc;
+
+        String orderByField = searchCriteria.getOrderBy();
+
+        // Special handling for numeric fields like countOfPeopleJoined
+        if (Constants.COUNT_OF_PEOPLE_JOINED.equalsIgnoreCase(orderByField)) {
+            // Sort directly on numeric field
             searchRequestBuilder.sort(SortOptions.of(so -> so
                 .field(f -> f
-                    .field(searchCriteria.getOrderBy() + Constants.KEYWORD)
+                    .field(orderByField)
                     .order(sortOrder)
                 )
             ));
-            if (searchCriteria.getOrderBy().equalsIgnoreCase(Constants.COUNT_OF_PEOPLE_JOINED)) {
-                searchRequestBuilder.sort(SortOptions.of(so -> so
-                    .field(f -> f
-                        .field(searchCriteria.getOrderBy()) // Use the field directly for long type
-                        .order(sortOrder)
-                    )
-                ));
-            }  else {
-                // Handle other types (like String or others)
-                searchRequestBuilder.sort(SortOptions.of(so -> so
-                    .field(f -> f
-                        .field(searchCriteria.getOrderBy() + Constants.KEYWORD)
-                        .order(sortOrder)
-                    )
-                ));
-            }
+        } else {
+            // Assume text field and sort on `.keyword` subfield
+            searchRequestBuilder.sort(SortOptions.of(so -> so
+                .field(f -> f
+                    .field(orderByField + Constants.KEYWORD)
+                    .order(sortOrder)
+                )
+            ));
         }
     }
+
 
     private void addRequestedFieldsToSearchSourceBuilder(
         SearchCriteria searchCriteria, SearchRequest.Builder searchRequestBuilder) {

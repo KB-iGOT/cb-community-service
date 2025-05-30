@@ -883,7 +883,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     return objectMapper.readValue(stringifiedJson, Object.class); // You can map this to a specific User type if needed
                 } catch (Exception e) {
                     // Handle any exceptions during deserialization
-                    e.printStackTrace();
+                    log.error("Deserialization error: {}", e.getMessage(), e);
                     return null; // Return null in case of error
                 }
             })

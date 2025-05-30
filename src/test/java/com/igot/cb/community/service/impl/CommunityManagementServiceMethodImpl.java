@@ -1,7 +1,11 @@
 package com.igot.cb.community.service.impl;
 
+import co.elastic.clients.elasticsearch.core.search.HitsMetadata;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.igot.cb.authentication.util.AccessTokenValidator;
 import com.igot.cb.community.entity.CommunityCategory;
 import com.igot.cb.community.repository.CommunityCategoryRepository;
@@ -24,6 +28,13 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
+import co.elastic.clients.elasticsearch._types.aggregations.StringTermsAggregate;
+import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
+
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -271,6 +282,110 @@ class CommunityManagementServiceImplMethodTest {
         assertEquals(Constants.SUCCESSFULLY_READING, response.getParams().getErrMsg());
 
         verify(cacheService).getCache(REDIS_CACHE_KEY);
+    }
+
+    @Test
+    void testListAllCategoryWithSubCat_success_fromDB() throws Exception {
+        // Given
+        String cachedJson = null;  // simulate cache miss
+
+        // Create realistic data with expected fields
+        ObjectMapper mapper = new ObjectMapper();
+        ArrayNode dataArray = mapper.createArrayNode();
+        ObjectNode item = mapper.createObjectNode();
+        item.put("orgId", "org123");
+        item.put("categoryId", "cat001");
+        item.put("name", "Sample Category");
+        dataArray.add(item);
+
+        when(cacheService.getCache(REDIS_CACHE_KEY)).thenReturn(cachedJson);
+
+        SearchResult mockResult = Mockito.mock(SearchResult.class);
+        when(mockResult.getData()).thenReturn(dataArray);
+
+        when(esUtilService.fetchTopCommunitiesForTopics(anyList(), anyString()))
+                .thenReturn(mockResult);
+
+        // Provide mock list with the same fields
+        List<Map<String, Object>> mockList = List.of(
+                Map.of(
+                        "orgId", "org123",
+                        "categoryId", "cat001",
+                        "name", "Sample Category"
+                )
+        );
+        when(objectMapper.convertValue(eq(dataArray), any(TypeReference.class)))
+                .thenReturn(mockList);
+
+        // When
+        ApiResponse response = service.lisAllCategoryWithSubCat();
+
+        // Then
+        assertEquals(HttpStatus.OK, response.getResponseCode());
+
+    }
+
+    @Test
+    void testGetPopularCommunitiesByField_success() throws Exception {
+        // Set private field noOfPopularCommunities to avoid NullPointerException
+        Field field = CommunityManagementServiceImpl.class.getDeclaredField("noOfPopularCommunities");
+        field.setAccessible(true);
+        field.set(service, 10);
+
+        // Prepare input payload
+        Map<String, Object> payload = new HashMap<>();
+        payload.put(Constants.FIELD, "popularity");
+
+        // Mock hits
+        Hit<Map<String, Object>> hit = mock(Hit.class);
+        Map<String, Object> sourceMap = Map.of("id", "comm1", "popularity", 100);
+        when(hit.source()).thenReturn(sourceMap);
+
+        List<Hit<Map<String, Object>>> hitsList = List.of(hit);
+
+        // Mock HitsMetadata
+        HitsMetadata<Map<String, Object>> hitsMetadata = mock(HitsMetadata.class);
+        when(hitsMetadata.hits()).thenReturn(hitsList);
+
+        // Mock SearchResponse
+        SearchResponse<Map<String, Object>> searchResponse = mock(SearchResponse.class);
+        when(searchResponse.hits()).thenReturn(hitsMetadata);
+
+        // Mock buckets for aggregation
+        StringTermsBucket bucket1 = StringTermsBucket.of(b -> b.key("pop1").docCount(10L));
+        StringTermsBucket bucket2 = StringTermsBucket.of(b -> b.key("pop2").docCount(5L));
+        List<StringTermsBucket> buckets = List.of(bucket1, bucket2);
+
+        // Mock StringTermsAggregate
+        StringTermsAggregate stringTermsAgg = StringTermsAggregate.of(st -> st.buckets(sb -> sb.array(buckets)));
+
+        // Mock Aggregate with string terms
+        Aggregate aggregate = Aggregate.of(a -> a.sterms(stringTermsAgg));
+
+        Map<String, Aggregate> aggregations = Map.of("popularity_terms", aggregate);
+
+        when(searchResponse.aggregations()).thenReturn(aggregations);
+
+        // Mock esUtilService call
+        when(esUtilService.popularCommunities(any(), any())).thenReturn(searchResponse);
+
+        // Call the service method
+        ApiResponse response = service.getPopularCommunitiesByField(payload);
+
+        // Assertions
+        assertEquals(HttpStatus.OK, response.getResponseCode());
+        assertNull(response.getParams().getErrMsg());
+
+        // Data assertions
+        List<Map<String, Object>> data = (List<Map<String, Object>>) response.getResult().get(Constants.DATA);
+        assertNotNull(data);
+        assertFalse(data.isEmpty());
+        assertEquals("comm1", data.get(0).get("id"));
+
+        // Facets assertions
+        List<Map<String, Object>> facets = (List<Map<String, Object>>) response.getResult().get(Constants.FACETS);
+        assertNotNull(facets);
+        assertEquals(2, facets.size());
     }
 }
 

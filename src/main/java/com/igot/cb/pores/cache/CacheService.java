@@ -104,7 +104,7 @@ public class CacheService {
 
       // Apply pagination
       if (startIndex < userIdList.size()) {
-        return userIdList.subList(startIndex, endIndex);
+        return  userIdList.subList(startIndex, endIndex);
       } else {
         return Collections.emptyList();
       }

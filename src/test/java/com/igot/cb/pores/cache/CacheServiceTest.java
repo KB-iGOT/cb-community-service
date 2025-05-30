@@ -147,5 +147,32 @@ class CacheServiceTest {
         assertEquals(0, result.size());
 
     }
+
+    @Test
+    void testGetPaginatedUsersFromHash_Success() {
+        // Given
+        String key = "testCommunity";
+        String redisKey = "community:" + key;
+        int offset = 0;
+        int limit = 2;
+
+        Map<String, String> redisData = new HashMap<>();
+        redisData.put("user1", "data1");
+        redisData.put("user3", "data3");
+        redisData.put("user2", "data2");
+
+        // When
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        // Use Answer to bypass generic inference issues
+        doReturn(hashOperations).when(redisTemplate).opsForHash();
+        when(hashOperations.entries(redisKey)).thenReturn(redisData);
+
+        // Then
+        List<String> result = cacheService.getPaginatedUsersFromHash(key, offset, limit);
+
+        // Assert
+        assertNotNull(result);
+    }
 }
 

@@ -2,13 +2,10 @@ package com.igot.cb.pores.elasticsearch.service;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
-import co.elastic.clients.elasticsearch._types.query_dsl.TermsQueryField;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
-import co.elastic.clients.elasticsearch.core.SearchResponse;
-import co.elastic.clients.elasticsearch.core.search.Hit;
-import co.elastic.clients.elasticsearch.core.search.HitsMetadata;
 import co.elastic.clients.json.JsonData;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.igot.cb.pores.elasticsearch.config.EsConfig;
@@ -17,14 +14,18 @@ import com.igot.cb.pores.util.CbServerProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.function.Executable;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class EsUtilServiceImplPrivateMethodTest {
@@ -41,6 +42,11 @@ class EsUtilServiceImplPrivateMethodTest {
     @BeforeEach
     void setup() throws Exception {
         esUtilService = new EsUtilServiceImpl(elasticsearchClient, esConfig, sbESClient);
+
+        ElasticsearchClient mockClient = mock(ElasticsearchClient.class);
+        EsConfig mockConfig = mock(EsConfig.class);
+        ElasticsearchClient sbMockClient = mock(ElasticsearchClient.class);
+        esUtilService = new EsUtilServiceImpl(mockClient, mockConfig, sbMockClient);
 
         Field objectMapperField = EsUtilServiceImpl.class.getDeclaredField("objectMapper");
         objectMapperField.setAccessible(true);
@@ -199,6 +205,122 @@ class EsUtilServiceImplPrivateMethodTest {
         assertTrue(query.bool().must().stream().anyMatch(q -> q.match().field().equals("name")));
     }
 
+    @Test
+    void testAddQueryStringToFilter_withValidSearchString_addsBoolQuery() throws Exception {
+        String searchString = "TestCommunity";
+
+        // Create a BoolQuery.Builder
+        BoolQuery.Builder builder = new BoolQuery.Builder();
+
+        // Use reflection to invoke private method
+        Method method = EsUtilServiceImpl.class.getDeclaredMethod("addQueryStringToFilter", String.class, BoolQuery.Builder.class);
+        method.setAccessible(true);
+        method.invoke(esUtilService, searchString, builder);
+
+        // Build final BoolQuery and verify content
+        BoolQuery boolQuery = builder.build();
+        assertFalse(boolQuery.must().isEmpty(), "Must clause should not be empty");
+
+        BoolQuery innerBool = boolQuery.must().get(0).bool();
+        assertEquals(2, innerBool.should().size(), "Inner BoolQuery should contain 2 should clauses");
+
+        List<String> fields = innerBool.should().stream().map(q -> q.wildcard().field()).collect(Collectors.toList());
+        assertTrue(fields.contains("communityName.keyword"));
+        assertTrue(fields.contains("orgName.keyword"));
+    }
+
+    @Test
+    void testAddQueryStringToFilter_withBlankSearchString_addsNothing() throws Exception {
+        // Empty search string
+        String searchString = " ";
+
+        BoolQuery.Builder builder = new BoolQuery.Builder();
+
+        Method method = EsUtilServiceImpl.class.getDeclaredMethod("addQueryStringToFilter", String.class, BoolQuery.Builder.class);
+        method.setAccessible(true);
+        method.invoke(esUtilService, searchString, builder);
+
+        BoolQuery boolQuery = builder.build();
+        assertTrue(boolQuery.must().isEmpty(), "Must clause should be empty for blank input");
+    }
+
+    @Test
+    void testBuildQueryPart_withNullMap_returnsMatchAll() throws Exception {
+        Query result = (Query) invokePrivateMethod("buildQueryPart", new Class[]{Map.class}, (Object) null);
+        assertNotNull(result);
+        assertTrue(result.isMatchAll());
+    }
+
+    @Test
+    void testBuildQueryPart_withUnsupportedQuery_throwsException() {
+        Map<String, Object> queryMap = Map.of("unknown", Map.of("field", "value"));
+        Executable exec = () -> invokePrivateMethod("buildQueryPart", new Class[]{Map.class}, queryMap);
+        assertThrows(InvocationTargetException.class, exec);
+    }
+
+    @Test
+    void testBuildRangeQuery_withGteLte() throws Exception {
+        Map<String, Object> conditions = Map.of(
+                "gte", 5,
+                "lte", 10
+        );
+        Map<String, Object> rangeMap = Map.of("age", conditions);
+
+        Query result = (Query) invokePrivateMethod("buildRangeQuery", new Class[]{Map.class}, rangeMap);
+        assertNotNull(result);
+        assertTrue(result.isBool());
+    }
+
+    @Test
+    void testAddFacetsToSearchSourceBuilder_usingReflection() throws Exception {
+        // Arrange
+
+        // Prepare input
+        List<String> facets = List.of("category", "topic");
+
+        // Create a SearchRequest.Builder instance
+        SearchRequest.Builder builder = new SearchRequest.Builder();
+
+        // Use reflection to access the private method
+        Method method = EsUtilServiceImpl.class.getDeclaredMethod(
+                "addFacetsToSearchSourceBuilder", List.class, SearchRequest.Builder.class);
+        method.setAccessible(true);
+
+        // Act
+        method.invoke(esUtilService, facets, builder);
+
+        // Assert
+        Map<String, Aggregation> aggregations = builder.build().aggregations();
+        assertNotNull(aggregations);
+        assertEquals(2, aggregations.size());
+        assertTrue(aggregations.containsKey("category_agg"));
+        assertTrue(aggregations.containsKey("topic_agg"));
+    }
+
+    @Test
+    void testUpdateUserIndex_appendFalse_success() throws Exception {
+        // Invoke private method using reflection
+        Method method = EsUtilServiceImpl.class.getDeclaredMethod("updateUserIndex", String.class, String.class, Boolean.class);
+        method.setAccessible(true);
+
+        // Act
+       method.invoke(esUtilService, "user123", "communityABC", true);
+
+}
+
+    @Test
+    void testUpdateUserIndex_appendFalse_Failed() throws Exception {
+        // Arrange
+
+        Method method = EsUtilServiceImpl.class.getDeclaredMethod("updateUserIndex", String.class, String.class, Boolean.class);
+        method.setAccessible(true);
+
+        // Act
+        Boolean result = (Boolean) method.invoke(esUtilService, "user123", "communityXYZ", false);
+
+        // Assert
+        assertFalse(result);
+    }
 
     // Reflection helper
     private Object invokePrivate(String methodName, Map<String, Object> map) throws Exception {
@@ -215,5 +337,10 @@ class EsUtilServiceImplPrivateMethodTest {
         method.invoke(esUtilService, criteria, builder);
     }
 
+    private Object invokePrivateMethod(String methodName, Class<?>[] paramTypes, Object... args) throws Exception {
+        Method method = EsUtilServiceImpl.class.getDeclaredMethod(methodName, paramTypes);
+        method.setAccessible(true);
+        return method.invoke(esUtilService, args);
+    }
 }
 

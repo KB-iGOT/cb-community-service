@@ -2085,7 +2085,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         } catch (Exception e) {
             logger.error("Exception occured while fetching and caching in search API:", e);
             throw new CustomException(Constants.ERROR, "error while processing "+ e.getMessage(),
-                HttpStatus.BAD_REQUEST);
+                HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

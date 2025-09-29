@@ -1965,7 +1965,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         } catch (Exception e) {
             logger.error("Error occured while searching:", e);
-            throw new CustomException(Constants.ERROR, "error while processing" +e.getMessage(),
+            throw new CustomException(Constants.ERROR, "error while processing",
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

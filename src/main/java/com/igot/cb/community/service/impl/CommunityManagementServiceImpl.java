@@ -40,6 +40,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
@@ -546,7 +547,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 parameterisedMap.put(Constants.USER_ID, userId);
                 parameterisedMap.put(Constants.STATUS, true);
                 parameterisedMap.put(Constants.LAST_UPDATED_AT,
-                    new Timestamp(Calendar.getInstance().getTime().getTime()));
+                        Instant.now());
                 cassandraOperation.insertRecord(Constants.KEYSPACE_SUNBIRD,
                     Constants.USER_COMMUNITY_TABLE, parameterisedMap);
                 Map<String, Object> dataMap = new HashMap<>();
@@ -566,7 +567,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                     Map<String, Object> updateUserCommunityLookUp = new HashMap<>();
                     updateUserCommunityDetails.put(Constants.STATUS, true);
                     updateUserCommunityDetails.put(Constants.LAST_UPDATED_AT,
-                        new Timestamp(Calendar.getInstance().getTime().getTime()));
+                        Instant.now());
                     updateUserCommunityLookUp.put(Constants.STATUS, true);
                     cassandraOperation.updateRecord(
                         Constants.KEYSPACE_SUNBIRD, Constants.USER_COMMUNITY_TABLE,
@@ -884,6 +885,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 } catch (Exception e) {
                     // Handle any exceptions during deserialization
                     log.error("Deserialization error: {}", e.getMessage(), e);
+                    log.error("Failed to convert String to Json: String value: " + stringifiedJson, e);
                     return null; // Return null in case of error
                 }
             })
@@ -933,7 +935,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 Map<String, Object> updateUserCommunityLookUp = new HashMap<>();
                 updateUserCommunityDetails.put(Constants.STATUS, false);
                 updateUserCommunityDetails.put(Constants.LAST_UPDATED_AT,
-                    new Timestamp(Calendar.getInstance().getTime().getTime()));
+                    Instant.now());
                 updateUserCommunityLookUp.put(Constants.STATUS, false);
                 cassandraOperation.updateRecord(
                     Constants.KEYSPACE_SUNBIRD, Constants.USER_COMMUNITY_TABLE,
@@ -1972,6 +1974,11 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 return response;
             }
             return searchCommunityFromEs(searchCriteria, response, communityIndex);
+        } catch (RuntimeException e) {
+            log.error("Validation error in search:", e);
+            createErrorResponse(response, e.getMessage(),
+                    HttpStatus.BAD_REQUEST, Constants.FAILED_CONST);
+            return response;
         } catch (Exception e) {
             logger.error("Error occured while searching:", e);
             throw new CustomException(Constants.ERROR, "error while processing",
@@ -2092,7 +2099,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             return response;
         } catch (Exception e) {
             logger.error("Exception occured while fetching and caching in search API:", e);
-            throw new CustomException(Constants.ERROR, "error while processing",
+            throw new CustomException(Constants.ERROR, "error while processing ",
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

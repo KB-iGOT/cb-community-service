@@ -2759,6 +2759,20 @@ class CommunityManagementServiceImplTest {
     }
 
 
+    @Test
+    void testValidateUser_validToken() {
+        ApiResponse response = new ApiResponse();
+        when(accessTokenValidator.verifyUserToken("token")).thenReturn("user123");
+
+        String result = invokePrivate("validateUser",
+                new Class[]{String.class, ApiResponse.class, String.class, HttpStatus.class},
+                new Object[]{"token", response, "err", HttpStatus.BAD_REQUEST});
+
+        assertEquals("user123", result);
+    }
+
+
+
 }
 
 

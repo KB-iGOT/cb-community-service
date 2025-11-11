@@ -85,7 +85,6 @@ class EsUtilServiceImplTest {
         Map<String, Object> document = new HashMap<>();
         document.put("validField", "value1");
         document.put("invalidField", "value2");
-
         // Schema only allows 'validField'
         Map<String, Object> schemaMap = new HashMap<>();
         schemaMap.put("validField", "type");

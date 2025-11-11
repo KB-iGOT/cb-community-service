@@ -93,6 +93,7 @@ class EsUtilServiceImplTest {
         // Stub objectMapper.readValue for nullable InputStream
         when(objectMapper.readValue(nullable(InputStream.class), any(TypeReference.class)))
                 .thenReturn(schemaMap);
+        esUtilService.addDocument("test_index", "_doc", "123", document, "/schema.json");
         assertFalse(document.containsKey("invalidField"), "Invalid field should be removed");
         assertTrue(document.containsKey("validField"), "Valid field should remain");
     }

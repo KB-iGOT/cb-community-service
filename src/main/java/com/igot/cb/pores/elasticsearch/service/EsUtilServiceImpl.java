@@ -61,9 +61,6 @@ import java.util.Map.Entry;
 @Slf4j
 public class EsUtilServiceImpl implements EsUtilService {
 
-    /*@Autowired
-    private RestHighLevelClient elasticsearchClient;*/
-    private final EsConfig esConfig;
     private final ElasticsearchClient elasticsearchClient;
     private  final RestHighLevelClient userESClient;
     private final Logger logger = LogManager.getLogger(getClass());
@@ -80,7 +77,6 @@ public class EsUtilServiceImpl implements EsUtilService {
     public EsUtilServiceImpl(@Qualifier("elasticsearchClient") ElasticsearchClient elasticsearchClient, EsConfig esConnection,
         @Qualifier("userESClient") RestHighLevelClient userESClient) {
         this.elasticsearchClient = elasticsearchClient;
-        this.esConfig = esConnection;
         this.userESClient = userESClient;
     }
 
@@ -175,11 +171,18 @@ public class EsUtilServiceImpl implements EsUtilService {
     public SearchResult searchDocuments(String esIndexName, SearchCriteria searchCriteria) {
         String searchString = searchCriteria.getSearchString();
         if (searchString != null && searchString.length() > cbServerProperties.getSearchStringMaxRegexLength()) {
-            throw new RuntimeException("The length of the search string exceeds the allowed maximum of " + cbServerProperties.getSearchStringMaxRegexLength() + " characters.");
+            throw new CustomException(
+                    "VALIDATION_ERROR",
+                    "The length of the search string exceeds the allowed maximum of "
+                            + cbServerProperties.getSearchStringMaxRegexLength() + " characters.",
+                    HttpStatus.BAD_REQUEST
+            );
         }
         SearchRequest.Builder searchRequestBuilder = buildSearchRequest(searchCriteria);
+        if (searchRequestBuilder == null) {
+            throw new IllegalStateException("Failed to build SearchRequest: builder is null");
+        }
         searchRequestBuilder.index(esIndexName);
-        assert searchRequestBuilder != null;
         try {
             SearchResult searchResult = new SearchResult();
 
@@ -366,7 +369,7 @@ public class EsUtilServiceImpl implements EsUtilService {
                         } else if (value instanceof ArrayList) {
                             List<FieldValue> termsList = ((ArrayList<String>) value).stream()
                                     .map(FieldValue::of)
-                                    .collect(Collectors.toList());
+                                    .toList();
                             boolQueryBuilder.must(Query.of(q -> q.terms(
                                     t -> t.field(field + Constants.KEYWORD)
                                             .terms(terms -> terms.value(termsList)))));
@@ -394,6 +397,9 @@ public class EsUtilServiceImpl implements EsUtilService {
                                             break;
                                         case Constants.SEARCH_OPERATION_LESS_THAN:
                                             rangeQuery.lt(JsonData.of(rangeValue));
+                                            break;
+                                        default:
+                                            logger.warn("Unsupported range operator: {}", rangeOperator);
                                             break;
                                     }
                                 });
@@ -479,7 +485,7 @@ public class EsUtilServiceImpl implements EsUtilService {
                 .collect(Collectors.toMap(
                     field -> field + "_agg",
                     field -> Aggregation.of(a -> a.terms(
-                        TermsAggregation.of(t -> t.field(field + ".keyword").size(250))))
+                        TermsAggregation.of(t -> t.field(field + Constants.KEYWORD).size(250))))
                 ));
             searchRequestBuilder.aggregations(aggregationMap);
         }
@@ -639,10 +645,10 @@ public class EsUtilServiceImpl implements EsUtilService {
         try {
             // Create a terms query to filter documents based on parentTopics
             Query termsQuery = Query.of(q -> q.terms(t -> t
-                .field(Constants.TOPIC_ID)
-                .terms(terms -> terms.value(parentTopics.stream()
-                    .map(FieldValue::of)
-                    .collect(Collectors.toList())))
+                    .field(Constants.TOPIC_ID)
+                    .terms(terms -> terms.value(parentTopics.stream()
+                            .map(FieldValue::of)
+                            .toList()))
             ));
 
             // Create the terms aggregation
@@ -742,7 +748,7 @@ public class EsUtilServiceImpl implements EsUtilService {
 
         } catch (ElasticsearchStatusException e) {
             if (e.status() == RestStatus.CONFLICT) {
-                logger.warn("Conflict detected, retrying attempt {} of {}", e);
+                logger.warn("Conflict detected, retrying", e);
             } else {
                 logger.error("Failed to upsert communityId for userId: {}", userId, e);
                 return false;
@@ -753,7 +759,7 @@ public class EsUtilServiceImpl implements EsUtilService {
         }
 
 
-        logger.error("Failed to upsert communityId for userId: {} after {} retries", userId);
+        logger.error("Failed to upsert communityId for userId: {} after retries", userId);
         return false;
     }
 
@@ -782,7 +788,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             // Check if any documents match the query
             return searchResponse.hits().total().value() > 0;
         } catch (Exception e) {
-            log.error("Error checking community existence in Elasticsearch: {}", e);
+            log.error(Constants.ERR_WHILE_CHECKING_COMMUNITY_EXISTENCE, e);
             return false;
         }
     }
@@ -794,8 +800,8 @@ public class EsUtilServiceImpl implements EsUtilService {
         try {
             // Build the query
             Query query = Query.of(q -> q.bool(b -> b
-                .must(m -> m.term(t -> t.field(Constants.ORG_ID + ".keyword").value(orgId)))
-                .must(m -> m.term(t -> t.field(Constants.COMMUNITY_NAME + ".keyword").value(communityName)))
+                .must(m -> m.term(t -> t.field(Constants.ORG_ID + Constants.KEYWORD).value(orgId)))
+                .must(m -> m.term(t -> t.field(Constants.COMMUNITY_NAME + Constants.KEYWORD).value(communityName)))
                 .mustNot(m -> {
                     if (excludeCommunityId != null && !excludeCommunityId.isEmpty()) {
                         return m.term(t -> t.field("_id").value(excludeCommunityId));
@@ -819,7 +825,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             return searchResponse.hits().total().value() > 0;
 
         } catch (Exception e) {
-            logger.error("Error checking community existence in Elasticsearch: {}", e);
+            logger.error(Constants.ERR_WHILE_CHECKING_COMMUNITY_EXISTENCE, e);
             return false;
         }
     }
@@ -846,7 +852,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             // Check if any documents match the query
             return searchResponse.hits().total().value() > 0;
         } catch (Exception e) {
-            logger.error("Error checking community existence in Elasticsearch: {}", e);
+            logger.error(Constants.ERR_WHILE_CHECKING_COMMUNITY_EXISTENCE, e);
             return false;
         }
     }
@@ -880,7 +886,7 @@ public class EsUtilServiceImpl implements EsUtilService {
             // Check if any documents match the query
             return searchResponse.hits().total().value() > 0;
         } catch (Exception e) {
-            logger.error("Error checking community existence in Elasticsearch: {}", e);
+            logger.error(Constants.ERR_WHILE_CHECKING_COMMUNITY_EXISTENCE, e);
             return false;
         }
     }
@@ -898,17 +904,6 @@ public class EsUtilServiceImpl implements EsUtilService {
     }
 
 
-    /**
-     * Helper method to process search hits and add them to the documents list.
-     */
-    private void processSearchHits(SearchResponse<Object> searchResponse, List<Map<String, Object>> documents) {
-        for (Hit<Object> hit : searchResponse.hits().hits()) {
-            if (hit.source() != null) {
-                JsonData source = (JsonData) hit.source();
-                documents.add(source.to(Map.class)); // Convert JsonData to Map
-            }
-        }
-    }
 
     public  Map<String, Object> readJsonSchema(String jsonFilePath) {
         if (schemaCache.containsKey(jsonFilePath)) {
@@ -916,7 +911,6 @@ public class EsUtilServiceImpl implements EsUtilService {
         }
 
         try (InputStream schemaStream = JsonSchemaFactory.getInstance().getClass().getResourceAsStream(jsonFilePath)) {
-            ObjectMapper objectMapper = new ObjectMapper();
             Map<String, Object> schemaMap = objectMapper.readValue(schemaStream, new TypeReference<Map<String, Object>>() {});
             schemaCache.put(jsonFilePath, schemaMap);
             return schemaMap;

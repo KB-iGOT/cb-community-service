@@ -70,7 +70,7 @@ public class CassandraConnectionManagerImpl implements CassandraConnectionManage
     /**
      * Creates a Cassandra connection based on properties
      */
-    private CqlSession createCassandraConnectionWithKeySpaces(String keySpaceName) {
+    private static CqlSession createCassandraConnectionWithKeySpaces(String keySpaceName) {
         try {
             // Load the properties required for connection
             PropertiesCache cache = PropertiesCache.getInstance();
@@ -83,15 +83,17 @@ public class CassandraConnectionManagerImpl implements CassandraConnectionManage
             }
             List<String> hosts = Arrays.asList(cassandraHost.split(","));
             List<InetSocketAddress> contactPoints = hosts.stream()
-                    .map(host -> new InetSocketAddress(host.trim(), 9042)) // Assuming default port 9042
-                    .collect(Collectors.toList());
+                    .map(host -> new InetSocketAddress(host.trim(), 9042))
+                    .toList();
             List<String> contactPointsString = hosts.stream()
                     .map(host -> host.trim() + ":9042") // Ensure proper host:port format
                     .collect(Collectors.toList());
+            ConsistencyLevel consistencyLevel = getConsistencyLevel();
+            String consistencyLevelName = consistencyLevel != null ? consistencyLevel.name() : ConsistencyLevel.LOCAL_ONE.name();
             DriverConfigLoader loader = DriverConfigLoader.programmaticBuilder()
                     .withStringList(DefaultDriverOption.CONTACT_POINTS, contactPointsString)
-                    .withString(DefaultDriverOption.REQUEST_CONSISTENCY, getConsistencyLevel().name())
-                    .withString(DefaultDriverOption.LOAD_BALANCING_LOCAL_DATACENTER, "datacenter1")
+                    .withString(DefaultDriverOption.REQUEST_CONSISTENCY, consistencyLevelName)
+                    .withString(DefaultDriverOption.LOAD_BALANCING_LOCAL_DATACENTER, Constants.DATA_CENTRE)
                     .withInt(DefaultDriverOption.CONNECTION_POOL_LOCAL_SIZE,
                             Integer.parseInt(cache.getProperty(Constants.CORE_CONNECTIONS_PER_HOST_FOR_LOCAL)))
                     .withInt(DefaultDriverOption.CONNECTION_POOL_REMOTE_SIZE,
@@ -108,14 +110,14 @@ public class CassandraConnectionManagerImpl implements CassandraConnectionManage
             if (StringUtils.isNotBlank(keySpaceName)) {
                 sessionWithKeyspaces = CqlSession.builder()
                         .addContactPoints(contactPoints)
-                        .withLocalDatacenter("datacenter1")
+                        .withLocalDatacenter(Constants.DATA_CENTRE)
                         .withKeyspace(keySpaceName)
                         .withConfigLoader(loader)
                         .build();
             } else {
                 sessionWithKeyspaces = CqlSession.builder()
                         .addContactPoints(contactPoints)
-                        .withLocalDatacenter("datacenter1")
+                        .withLocalDatacenter(Constants.DATA_CENTRE)
                         .withConfigLoader(loader)
                         .build();
             }

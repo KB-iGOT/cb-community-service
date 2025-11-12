@@ -68,6 +68,7 @@ public class OutboundRequestHandlerServiceImpl {
             new TypeReference<HashMap<String, Object>>() {
             });
       } catch (Exception e1) {
+          log.error(Constants.ERR_OCCURED, e1);
       }
       log.error("Failed to get details. ", e);
     } catch (Exception e) {
@@ -99,13 +100,16 @@ public class OutboundRequestHandlerServiceImpl {
             new TypeReference<HashMap<String, Object>>() {
             });
       } catch (Exception e1) {
+          log.error(Constants.ERR_OCCURED, e1);
       }
-      log.error("Error received: " + e.getResponseBodyAsString(), e);
+      log.error(Constants.ERR_RECEIVED + e.getResponseBodyAsString(), e);
     } catch (Exception e) {
       log.error(e.getMessage());
       try {
-        log.warn("Error Response: " + mapper.writeValueAsString(response));
+          log.warn("Error response: {}", mapper.writeValueAsString(response));
+
       } catch (Exception e1) {
+          log.error(Constants.ERR_OCCURED, e1);
       }
     }
     return response;
@@ -166,11 +170,11 @@ public class OutboundRequestHandlerServiceImpl {
             });
       } catch (Exception e1) {
       }
-      log.error("Error received: " + e.getResponseBodyAsString(), e);
+      log.error(Constants.ERR_RECEIVED + e.getResponseBodyAsString(), e);
     } catch (Exception e) {
       log.error(e.getMessage());
       try {
-        log.warn("Error Response: " + mapper.writeValueAsString(response));
+        log.warn(Constants.ERR_RESPONSE + mapper.writeValueAsString(response));
       } catch (Exception e1) {
       }
     }
@@ -210,11 +214,11 @@ public class OutboundRequestHandlerServiceImpl {
             });
       } catch (Exception e1) {
       }
-      log.error("Error received: " + hce.getResponseBodyAsString(), hce);
+      log.error(Constants.ERR_RECEIVED + hce.getResponseBodyAsString(), hce);
     } catch(JsonProcessingException e) {
       log.error(e.getMessage());
       try {
-        log.warn("Error Response: " + mapper.writeValueAsString(response));
+        log.warn(Constants.ERR_RESPONSE + mapper.writeValueAsString(response));
       } catch (Exception e1) {
       }
     }
@@ -244,7 +248,7 @@ public class OutboundRequestHandlerServiceImpl {
             });
       } catch (Exception e1) {
       }
-      log.error("Error received: " + e.getResponseBodyAsString(), e);
+      log.error(Constants.ERR_RECEIVED + e.getResponseBodyAsString(), e);
     }
     if (response == null) {
       return MapUtils.EMPTY_MAP;

@@ -68,6 +68,6 @@ public class CbServerProperties {
     @Value("${redis.scan.count.size}")
     private int redisScanCountSize;
 
-    @Value("${redis.community.user.data.ttl}")
-    private long redisCommunityUserDataTtl;
+    @Value("${redis.community.user.data.ttl.seconds}")
+    private long redisCommunityUserDataTtlSeconds;
 }

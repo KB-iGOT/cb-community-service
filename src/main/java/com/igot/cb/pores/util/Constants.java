@@ -264,6 +264,8 @@ public class Constants {
     public static final String FAILED_USERS = "failedUsers";
     public static final String COMMUNITY_ACCESS_LEVEL = "communityAccessLevel";
     public static final String USER_IDS = "userIds";
+    public static final String API_COMMUNITY_ADMIN_JOIN = "api.community.admin.join";
+    public static final String API_COMMUNITY_ADMIN_UNJOIN = "api.community.admin.unjoin";
 
     private Constants() {
     }

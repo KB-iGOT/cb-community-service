@@ -2341,36 +2341,20 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
     public ApiResponse adminJoinCommunity(Map<String, Object> request, String authToken) {
 
         logger.info("CommunityManagementServiceImpl:adminJoinCommunity");
-        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_JOIN);
+        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_ADMIN_JOIN);
         try {
-            String adminUserId = accessTokenValidator.verifyUserToken(authToken);
-            if (StringUtils.isBlank(adminUserId)) {
-                response.getParams().setErrMsg(Constants.USER_ID_DOESNT_EXIST);
-                response.setResponseCode(HttpStatus.BAD_REQUEST);
+            CommunityEntity community = validateAdminCommunityRequest(request, authToken, response);
+            if (community == null) {
                 return response;
             }
-
-            String error = validateJoinPayload(request);
-            if (StringUtils.isNotBlank(error)) {
-                return returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
-            }
-
-            List<String> userIds = validateUserIds(request, response);
-            if (CollectionUtils.isEmpty(userIds)) {
-                return response;
-            }
-
             String communityId = (String) request.get(Constants.COMMUNITY_ID);
-            CommunityEntity community = validateCommunity(communityId, response);
-            if (ObjectUtils.isEmpty(community)) {
-                return response;
-            }
             Instant now = Instant.now();
 
             List<String> joinedUsers = new ArrayList<>();
             List<String> alreadyJoinedUsers = new ArrayList<>();
             List<String> failedUsers = new ArrayList<>();
 
+            List<String> userIds = (List<String>) request.get(Constants.USER_IDS);
             for (String userId : userIds) {
                 String status = joinUserToCommunity(userId, communityId, community, now);
                 switch (status) {
@@ -2396,10 +2380,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
 
         } catch (Exception e) {
             logger.error("Error while admin joining users to community", e);
-            throw new CustomException(
-                    Constants.ERROR,
-                    "error while processing",
-                    HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new CustomException(Constants.ERROR, "error while processing", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -2434,12 +2415,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
                 Map<String, Object> updateMap = new HashMap<>();
                 updateMap.put(Constants.STATUS, true);
                 updateMap.put(Constants.LAST_UPDATED_AT, now);
-
-                cassandraOperation.updateRecord(
-                        Constants.KEYSPACE_SUNBIRD,
-                        Constants.USER_COMMUNITY_TABLE,
-                        updateMap,
-                        propertyMap);
+                cassandraOperation.updateRecord(Constants.KEYSPACE_SUNBIRD, Constants.USER_COMMUNITY_TABLE, updateMap, propertyMap);
             }
 
             Map<String, Object> dataMap = new HashMap<>();
@@ -2459,35 +2435,19 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
     public ApiResponse adminUnjoinCommunity(Map<String, Object> request, String authToken) {
 
         logger.info("CommunityManagementServiceImpl:adminUnjoinCommunity");
-        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_UNJOIN);
+        ApiResponse response = ProjectUtil.createDefaultResponse(Constants.API_COMMUNITY_ADMIN_UNJOIN);
         try {
-            String adminUserId = accessTokenValidator.verifyUserToken(authToken);
-            if (StringUtils.isBlank(adminUserId)) {
-                response.getParams().setErrMsg(Constants.USER_ID_DOESNT_EXIST);
-                response.setResponseCode(HttpStatus.BAD_REQUEST);
+            CommunityEntity community = validateAdminCommunityRequest(request, authToken, response);
+            if (community == null) {
                 return response;
             }
-
-            String error = validateJoinPayload(request);
-            if (StringUtils.isNotBlank(error)) {
-                return returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
-            }
-
-            List<String> userIds = validateUserIds(request, response);
-            if (CollectionUtils.isEmpty(userIds)) {
-                return response;
-            }
-
             String communityId = (String) request.get(Constants.COMMUNITY_ID);
-            CommunityEntity community = validateCommunity(communityId, response);
-            if (ObjectUtils.isEmpty(community)) {
-                return response;
-            }
             Instant now = Instant.now();
             List<String> unjoinedUsers = new ArrayList<>();
             List<String> notJoinedUsers = new ArrayList<>();
             List<String> failedUsers = new ArrayList<>();
 
+            List<String> userIds = (List<String>) request.get(Constants.USER_IDS);
             for (String userId : userIds) {
                 String status = unjoinUserFromCommunity(userId, communityId, community, now);
                 switch (status) {
@@ -2547,24 +2507,13 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
             Map<String, Object> updateUserCommunityLookUp = new HashMap<>();
             updateUserCommunityLookUp.put(Constants.STATUS, false);
 
-            cassandraOperation.updateRecord(
-                    Constants.KEYSPACE_SUNBIRD,
-                    Constants.USER_COMMUNITY_TABLE,
-                    updateUserCommunityDetails,
-                    propertyMap);
-
-            cassandraOperation.updateRecord(
-                    Constants.KEYSPACE_SUNBIRD,
-                    Constants.USER_COMMUNITY_LOOK_UP_TABLE,
-                    updateUserCommunityLookUp,
-                    propertyMap);
+            cassandraOperation.updateRecord(Constants.KEYSPACE_SUNBIRD, Constants.USER_COMMUNITY_TABLE, updateUserCommunityDetails, propertyMap);
+            cassandraOperation.updateRecord(Constants.KEYSPACE_SUNBIRD, Constants.USER_COMMUNITY_LOOK_UP_TABLE, updateUserCommunityLookUp, propertyMap);
 
             JsonNode dataNode = community.getData();
             ((ObjectNode) dataNode).put(Constants.COUNT_OF_PEOPLE_JOINED, dataNode.get(Constants.COUNT_OF_PEOPLE_JOINED).asInt() - 1);
             updateCommunityDetails(community, userId, dataNode, Constants.ACTIVE);
-            cacheService.deleteUserFromHash(
-                    Constants.CMMUNITY_USER_REDIS_PREFIX + communityId,
-                    Constants.USER_PREFIX + userId);
+            cacheService.deleteUserFromHash(Constants.CMMUNITY_USER_REDIS_PREFIX + communityId, Constants.USER_PREFIX + userId);
 
             esUtilService.updateUserIndex(userId, communityId, false);
             return Constants.UNJOINED_UPPER;
@@ -2575,29 +2524,48 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         }
     }
 
-    private List<String> validateUserIds(Map<String, Object> request, ApiResponse response) {
+    private CommunityEntity validateAdminCommunityRequest(
+            Map<String, Object> request,
+            String authToken,
+            ApiResponse response) {
 
+        String adminUserId = accessTokenValidator.verifyUserToken(authToken);
+        if (StringUtils.isBlank(adminUserId)) {
+            returnErrorMsg("Invalid user ID from auth token.", HttpStatus.BAD_REQUEST, response);
+            return null;
+        }
+
+        String error = validateJoinPayload(request);
+        if (StringUtils.isNotBlank(error)) {
+            returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
+            return null;
+        }
+
+        error = validateUserIds(request);
+        if (StringUtils.isNotBlank(error)) {
+            returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
+            return null;
+        }
+
+        String communityId = (String) request.get(Constants.COMMUNITY_ID);
+        return validateCommunity(communityId, response);
+    }
+
+    private String validateUserIds(Map<String, Object> request) {
         Object usersObj = request.get(Constants.USER_IDS);
         if (!(usersObj instanceof List)) {
-            response.getParams().setErr("Invalid userIds");
-            response.setResponseCode(HttpStatus.BAD_REQUEST);
-            return Collections.emptyList();
+            return "Invalid userIds";
         }
         List<String> userIds = new ArrayList<>(new LinkedHashSet<>((List<String>) usersObj));
         if (CollectionUtils.isEmpty(userIds)) {
-            response.getParams().setErr("userIds cannot be empty");
-            response.setResponseCode(HttpStatus.BAD_REQUEST);
-            return Collections.emptyList();
+            return "userIds cannot be empty";
         }
+        request.put(Constants.USER_IDS, userIds);
         int maxUsers = cbServerProperties.getCommunityAdminJoinMaxUser();
         if (userIds.size() > maxUsers) {
-            response.getParams().setErr(
-                    "Maximum " + maxUsers +
-                            " users allowed per request");
-            response.setResponseCode(HttpStatus.BAD_REQUEST);
-            return Collections.emptyList();
+            return "Maximum " + maxUsers + " users allowed per request";
         }
-        return userIds;
+        return null;
     }
 
     private CommunityEntity validateCommunity(String communityId, ApiResponse response) {

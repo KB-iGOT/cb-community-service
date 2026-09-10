@@ -103,8 +103,3 @@ communities_reportedby_user in sunbird cassandra - to fetch the list of users jo
     AND read_repair_chance = 0.0
     AND speculative_retry = '99PERCENTILE';
 ```
-
-
-
-
-

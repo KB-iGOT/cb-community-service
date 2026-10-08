@@ -502,13 +502,7 @@ public class CommunityManagementServiceImpl implements CommunityManagementServic
         while (fields.hasNext()) {
             Map.Entry<String, JsonNode> field = fields.next();
             String fieldName = field.getKey();
-            // Check if the field is present in the update JsonNode
-            if (dataNode.has(fieldName)) {
-                // Update the main JsonNode with the value from the update JsonNode
-                ((ObjectNode) dataNode).set(fieldName, communityDetails.get(fieldName));
-            } else {
-                ((ObjectNode) dataNode).set(fieldName, communityDetails.get(fieldName));
-            }
+            ((ObjectNode) dataNode).set(fieldName, communityDetails.get(fieldName));
         }
     }
 

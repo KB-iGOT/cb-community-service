@@ -185,6 +185,6 @@ class AccessTokenValidatorTest {
     }
 
     private String base64UrlEncode(byte[] data) {
-        return Base64Util.encodeToString(data, Base64Util.URL_SAFE | Base64Util.NO_PADDING | Base64Util.NO_WRAP);
+        return Base64Util.encodeToString(data, Base64Util.URL_SAFE);
     }
 }

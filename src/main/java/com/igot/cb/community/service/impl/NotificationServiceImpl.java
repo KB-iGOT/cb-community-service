@@ -4,26 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.igot.cb.community.service.NotificationService;
 import com.igot.cb.pores.exceptions.CustomException;
-import com.igot.cb.pores.util.CbServerProperties;
-import com.igot.cb.pores.util.Config;
-import com.igot.cb.pores.util.Constants;
-import com.igot.cb.pores.util.NotificationAsyncRequest;
-import com.igot.cb.pores.util.OutboundRequestHandlerServiceImpl;
-import com.igot.cb.pores.util.Template;
+import com.igot.cb.pores.util.*;
 import com.igot.cb.transactional.cassandrautils.CassandraOperation;
-import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
@@ -34,32 +17,37 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.io.StringWriter;
+import java.util.*;
+import java.util.stream.Collectors;
+
 @Service
 @Slf4j
 public class NotificationServiceImpl implements NotificationService {
 
-  @Autowired
-  CassandraOperation cassandraOperation;
-
-  @Autowired
-  ObjectMapper objectMapper;
-
-  @Autowired
-  CbServerProperties props;
-
-  @Autowired
-  OutboundRequestHandlerServiceImpl outboundRequestHandlerService;
+  private final CassandraOperation cassandraOperation;
+  private final ObjectMapper objectMapper;
+  private final CbServerProperties props;
+  private final OutboundRequestHandlerServiceImpl outboundRequestHandlerService;
 
   @Value("${moderator.mail.subject}")
   private String moderatorMailSubject;
 
   private Logger logger = LoggerFactory.getLogger(NotificationServiceImpl.class);
 
+  @Autowired
+  public NotificationServiceImpl(CassandraOperation cassandraOperation, ObjectMapper objectMapper,
+      CbServerProperties props, OutboundRequestHandlerServiceImpl outboundRequestHandlerService) {
+    this.cassandraOperation = cassandraOperation;
+    this.objectMapper = objectMapper;
+    this.props = props;
+    this.outboundRequestHandlerService = outboundRequestHandlerService;
+  }
+
   @Override
   public void sendNotification(List<String> moderatorIds, String communityId, String userId,
       String communityName) {
     logger.info("NotificationService::sendNotification:Sending notification to moderators");
-    List<String> fields = Arrays.asList(Constants.FIRST_NAME);
     moderatorIds.add(userId);
     Map<String, Object> propertiesMap = new HashMap<>();
     propertiesMap.put(Constants.ID, moderatorIds);
@@ -68,7 +56,6 @@ public class NotificationServiceImpl implements NotificationService {
         Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID), null);
     // Create senderUserMap
     Map<String, Map<String, Object>> senderUserMap = new HashMap<>();
-    List<String> emailResponseList = new ArrayList<>();
     Map<String, Map<String, Object>> userListMap = userList.stream()
         .collect(Collectors.toMap(
             userInfo -> (String) userInfo.get(Constants.ID), // Key: userId
@@ -87,10 +74,7 @@ public class NotificationServiceImpl implements NotificationService {
                       .filter(Map.class::isInstance)
                       .map(Map.class::cast)
                       .map(personalDetails -> personalDetails.get(Constants.PRIMARY_EMAIL))
-                      .ifPresent(email -> {
-                        userMap.put(Constants.PRIMARY_EMAIL, email);
-                        emailResponseList.add((String) email);
-                      });
+                      .ifPresent(email -> userMap.put(Constants.PRIMARY_EMAIL, email));
                 } catch (Exception e) {
                   logger.error("Error processing user profile details:", e);
                   throw new CustomException(Constants.ERROR, "Error while processing",
@@ -108,7 +92,7 @@ public class NotificationServiceImpl implements NotificationService {
     String link = props.getDomainUrl()+props.getFixedCommunityUrl()+communityId;
     Map<String, Object> mailNotificationDetails = new HashMap<>();
     mailNotificationDetails.put(Constants.SUBJECT, moderatorMailSubject);
-    mailNotificationDetails.put(Constants.LINK, link.toString());
+    mailNotificationDetails.put(Constants.LINK, link);
     mailNotificationDetails.put(Constants.USER_ID, userId);
     mailNotificationDetails.put(Constants.MDO_LEADER_NAME, senderUserMap.get(userId).get(Constants.FIRST_NAME));
     mailNotificationDetails.put(Constants.COMMUNITY_NAME_TAG, communityName);
@@ -168,14 +152,14 @@ public class NotificationServiceImpl implements NotificationService {
     builder.append(props.getNotifyServiceHost()).append(props.getNotifyServicePathAsync());
     try {
       Map<String, Object> response = outboundRequestHandlerService.fetchResultUsingPost(builder.toString(), request, null);
-      logger.debug("The email notification is successfully sent, response is: " + response);
+      logger.debug("The email notification is successfully sent, response is: {}", response);
     } catch (Exception e) {
       logger.error("Exception while posting the data in notification service: ", e);
     }
   }
 
   private String constructEmailTemplate(String templateName, Map<String, Object> params) {
-    String replacedHTML = new String();
+    String replacedHTML = "";
     try {
       Map<String, Object> propertyMap = new HashMap<>();
       propertyMap.put(Constants.NAME, templateName);

@@ -23,8 +23,12 @@ import java.util.Map;
 public class RequestHandlerServiceImpl {
     private Logger log = LoggerFactory.getLogger(RequestHandlerServiceImpl.class);
 
+    private final RestTemplate restTemplate;
+
     @Autowired
-    private RestTemplate restTemplate;
+    public RequestHandlerServiceImpl(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     public Map<String, Object> fetchResultUsingPost(String uri, Object request, Map<String, String> headersValues) {
         ObjectMapper mapper = new ObjectMapper();
@@ -33,7 +37,7 @@ public class RequestHandlerServiceImpl {
         try {
             HttpHeaders headers = new HttpHeaders();
             if (!CollectionUtils.isEmpty(headersValues)) {
-                headersValues.forEach((k, v) -> headers.set(k, v));
+                headersValues.forEach(headers::set);
             }
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Object> entity = new HttpEntity<>(request, headers);
@@ -56,13 +60,15 @@ public class RequestHandlerServiceImpl {
                         new TypeReference<HashMap<String, Object>>() {
                         });
             } catch (Exception e1) {
+                log.error("Error while parsing error response: {}", e1.getMessage());
             }
-            log.error("Error received: " + hce.getResponseBodyAsString(), hce);
+            log.error("Error received: {}", hce.getResponseBodyAsString(), hce);
         } catch(JsonProcessingException e) {
             log.error(String.valueOf(e));
             try {
-                log.warn("Error Response: " + mapper.writeValueAsString(response));
+                log.warn("Error Response: {}", mapper.writeValueAsString(response));
             } catch (Exception e1) {
+                log.error("Error while logging response: {}", e1.getMessage());
             }
         }
         return response;
@@ -81,7 +87,7 @@ public class RequestHandlerServiceImpl {
             }
             HttpHeaders headers = new HttpHeaders();
             if (!CollectionUtils.isEmpty(headersValues)) {
-                headersValues.forEach((k, v) -> headers.set(k, v));
+                headersValues.forEach(headers::set);
             }
             HttpEntity<Object> entity = new HttpEntity<>(headers);
             response = restTemplate.exchange(uri, HttpMethod.GET, entity, Map.class).getBody();
@@ -91,13 +97,15 @@ public class RequestHandlerServiceImpl {
                         new TypeReference<HashMap<String, Object>>() {
                         });
             } catch (Exception e1) {
+                log.error("Error while parsing error response: {}", e1.getMessage());
             }
-            log.error("Error received: " + e.getResponseBodyAsString(), e);
+            log.error("Error received: {}", e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             log.error(String.valueOf(e));
             try {
-                log.warn("Error Response: " + mapper.writeValueAsString(response));
+                log.warn("Error Response: {}", mapper.writeValueAsString(response));
             } catch (Exception e1) {
+                log.error("Error while logging response: {}", e1.getMessage());
             }
         }
         return response;

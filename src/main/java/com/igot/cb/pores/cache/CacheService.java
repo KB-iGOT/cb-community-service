@@ -25,21 +25,24 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class CacheService {
 
-  @Autowired
-  private RedisTemplate<String, String> redisTemplate;
-
-  @Autowired
-  @Qualifier(Constants.REDIS_DATA_TEMPLATE)
-  private RedisTemplate<String, String> redisDataTemplate;
-
-  @Autowired
-  private ObjectMapper objectMapper;
+  private final RedisTemplate<String, String> redisTemplate;
+  private final RedisTemplate<String, String> redisDataTemplate;
+  private final ObjectMapper objectMapper;
 
   @Value("${spring.redis.cacheTtl}")
   private long cacheTtl;
 
+  private final CbServerProperties properties;
+
   @Autowired
-  private CbServerProperties properties;
+  public CacheService(RedisTemplate<String, String> redisTemplate,
+      @Qualifier(Constants.REDIS_DATA_TEMPLATE) RedisTemplate<String, String> redisDataTemplate,
+      ObjectMapper objectMapper, CbServerProperties properties) {
+    this.redisTemplate = redisTemplate;
+    this.redisDataTemplate = redisDataTemplate;
+    this.objectMapper = objectMapper;
+    this.properties = properties;
+  }
 
   public void putCache(String key, Object object) {
     try {
@@ -84,8 +87,7 @@ public class CacheService {
       // Add each field to the hash only if it does not exist
       HashOperations<String, String, String> hashOps = redisTemplate.opsForHash();
       for (Map.Entry<String, String> entry : userMap.entrySet()) {
-        Boolean isAbsent = hashOps.putIfAbsent(key, entry.getKey(), entry.getValue());
-        // Optional: track how many were actually added
+        hashOps.putIfAbsent(key, entry.getKey(), entry.getValue());
       }
       redisTemplate.expire(key, properties.getRedisCommunityUserDataTtlSeconds(), TimeUnit.SECONDS);
     } catch (Exception e) {

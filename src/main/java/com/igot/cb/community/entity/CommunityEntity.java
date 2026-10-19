@@ -2,20 +2,18 @@ package com.igot.cb.community.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
-
 import com.vladmihalcea.hibernate.type.json.JsonType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.sql.Timestamp;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.Type;
+
+import java.sql.Timestamp;
 
 
 /**
@@ -40,7 +38,7 @@ public class CommunityEntity {
 
     private Timestamp updatedOn;
 
-    private String created_by;
+    private String createdBy;
 
     @Column(name="is_active")
     private boolean isActive;

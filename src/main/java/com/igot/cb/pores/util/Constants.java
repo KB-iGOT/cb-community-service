@@ -6,6 +6,7 @@ package com.igot.cb.pores.util;
 public class Constants {
 
     public static final String KEYSPACE_SUNBIRD = "sunbird";
+    public static final String PATH_DELIMITER = "/";
     public static final String CORE_CONNECTIONS_PER_HOST_FOR_LOCAL = "coreConnectionsPerHostForLocal";
     public static final String CORE_CONNECTIONS_PER_HOST_FOR_REMOTE = "coreConnectionsPerHostForRemote";
     public static final String MAX_CONNECTIONS_PER_HOST_FOR_LOCAL = "maxConnectionsPerHostForLocal";
@@ -70,6 +71,7 @@ public class Constants {
     public static final String X_AUTH_TOKEN = "x-authenticated-user-token";
     public static final String INDEX_NAME = "community_entity_alias";
     public static final String ERROR = "ERROR";
+    public static final String ERROR_WHILE_PROCESSING = "error while processing";
     public static final String INVALID_DATA = "No data found";
     public static final String PAYLOAD_VALIDATION_FILE = "/payloadValidation/communityValidationData.json";
     public static final String USER_ID_DOESNT_EXIST = "User Id doesn't exist! Please supply a valid auth token";
@@ -100,7 +102,6 @@ public class Constants {
     public static final String LAST_UPDATED_AT = "lastupdatedat";
     public static final String USER_DETAILS = "userDetails";
     public static final String USER_COUNT = "usersJoinedCount";
-    public static String CommunityId = "communityId";
     public static final String ALREADY_JOINED_COMMUNITY = "This user is already joined this community";
     public static final String API_COMMUNITY_JOIN = "api.community.join";
     public static final String API_COMMUNITY_LIST_USER = "api.community.list.of.joined";
@@ -109,7 +110,6 @@ public class Constants {
     public static final String NOT_JOINED_ALREADY = "This user is not already joined";
     public static final String API_COMMUNITY_SEARCH = "api.community.search";
     public static final String REQUEST_PAYLOAD = "requestPayload";
-    public static final String JWT_SECRET_KEY = "community_search_result";
     public static final String SEARCH_RESULTS = "search_results";
     public static final String MINIMUM_CHARACTERS_NEEDED= "Minimum 3 characters are required to search";
     public static final String FAILED_CONST = "FAILED";
@@ -177,7 +177,6 @@ public class Constants {
     public static final String REPORTED = "reported";
     public static final String COMMUNITY_REPORT_FAILED = "Failed to report discussion";
     public static final String REPORTED_BY = "reportedBy";
-    public static final String _DOC = "_doc";
     public static final String DISCUSSION_COMMUNITY_KEY = "discussionCommunities";
     public static final String COMMUNITY_UPLOAD_FILE = "api.community.uploadFile";
     public static final String COMMUNITY_FILE_EMPTY = "File is empty";
@@ -240,9 +239,9 @@ public class Constants {
     public static final String MDO_LEADER_NAME = "mdo_leader_name";
     public static final String COMMUNITY_NAME_TAG = "community_name";
     public static final String MODERATOR_NAME = "moderator_name";
-    public static String CommunityCreationAllowed = "isCommunityCreationAllowed";
-    public static String CREATE_ERROR_MSG_WITHIN_COMMUNITY = "A community with this name already exists. Please choose a different name to continue.";
-    public static String CREATE_ERROR_MSG_COMMUNITY="Community name already exists. Do you still want to continue?";
+    public static final String COMMUNITY_CREATION_ALLOWED = "isCommunityCreationAllowed";
+    public static final String CREATE_ERROR_MSG_WITHIN_COMMUNITY = "A community with this name already exists. Please choose a different name to continue.";
+    public static final String CREATE_ERROR_MSG_COMMUNITY="Community name already exists. Do you still want to continue?";
     public static final String TRUE = "True";
     public static final String REDIS_DATA_TEMPLATE = "redisDataTemplate";
     public static final String SEARCH_RESULT_REDIS_TEMPLATE = "searchResultRedisTemplate";
@@ -266,6 +265,11 @@ public class Constants {
     public static final String USER_IDS = "userIds";
     public static final String API_COMMUNITY_ADMIN_JOIN = "api.community.admin.join";
     public static final String API_COMMUNITY_ADMIN_UNJOIN = "api.community.admin.unjoin";
+    public static final String PUBLIC_KEY_HEADER = "(-+BEGIN PUBLIC KEY-+)";
+    public static final String PUBLIC_KEY_FOOTER = "(-+END PUBLIC KEY-+)";
+    public static final String NEW_LINE_REGEX = "[\\r\\n]+";
+    public static final String EMPTY_STRING = "";
+
 
     private Constants() {
     }

@@ -1,4 +1,4 @@
-FROM openjdk:17.0.1-jdk-slim
+FROM eclipse-temurin:17-jdk
 
 RUN useradd -ms /bin/bash appuser
 
@@ -6,7 +6,6 @@ RUN apt-get update \
     && apt-get install -y \
         curl \
         libxrender1 \
-        libjpeg62-turbo \
         fontconfig \
         libxtst6 \
         xfonts-75dpi \
